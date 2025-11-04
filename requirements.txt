@@ -1,0 +1,9 @@
+# NovelGrok AI小说写作工具依赖包
+
+# 核心依赖
+openai>=1.0.0           # Grok API客户端 (使用OpenAI兼容接口)
+python-dotenv>=1.0.0    # 环境变量管理
+
+# Web界面依赖
+flask>=3.0.0            # Web框架
+flask-cors>=4.0.0       # 跨域支持

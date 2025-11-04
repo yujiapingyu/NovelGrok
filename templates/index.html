@@ -1,0 +1,1796 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NovelGrok - AI小说写作工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            min-height: calc(100vh - 200px);
+        }
+
+        .sidebar {
+            background: #f8f9fa;
+            padding: 20px;
+            border-right: 1px solid #e0e0e0;
+        }
+
+        .project-list {
+            margin-top: 20px;
+        }
+
+        .project-item {
+            background: white;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+        }
+
+        .project-item:hover {
+            transform: translateX(5px);
+            border-color: #667eea;
+        }
+
+        .project-item.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .project-item h3 {
+            font-size: 1.1em;
+            margin-bottom: 5px;
+        }
+
+        .project-item .meta {
+            font-size: 0.85em;
+            opacity: 0.7;
+        }
+
+        .content-area {
+            padding: 30px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1em;
+            color: #666;
+            transition: all 0.3s;
+            border-bottom: 3px solid transparent;
+        }
+
+        .tab:hover {
+            color: #667eea;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .btn {
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: all 0.3s;
+        }
+
+        .btn:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-group textarea {
+            min-height: 150px;
+            resize: vertical;
+        }
+
+        .card {
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            transition: all 0.3s;
+        }
+
+        .card:hover {
+            border-color: #667eea;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .card h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+
+        .character-card,
+        .chapter-card {
+            position: relative;
+        }
+
+        .card-actions {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .icon-btn {
+            padding: 8px 12px;
+            background: #f8f9fa;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .icon-btn:hover {
+            background: #e9ecef;
+            transform: translateY(-2px);
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+            animation: fadeIn 0.3s;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            animation: slideUp 0.3s;
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .modal-header {
+            margin-bottom: 20px;
+        }
+
+        .modal-header h2 {
+            color: #667eea;
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .alert-warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .stat-card .value {
+            font-size: 2em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-card .label {
+            opacity: 0.9;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .empty-state svg {
+            width: 100px;
+            height: 100px;
+            margin-bottom: 20px;
+            opacity: 0.3;
+        }
+
+        .chapter-content {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            line-height: 1.8;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+
+        /* 角色追踪样式 */
+        .form-control {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+        }
+
+        .relationship-item {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        .relationship-type {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+            margin-right: 15px;
+        }
+
+        .rel-friend { background: #28a745; color: white; }
+        .rel-enemy { background: #dc3545; color: white; }
+        .rel-family { background: #6f42c1; color: white; }
+        .rel-lover { background: #e83e8c; color: white; }
+        .rel-mentor { background: #20c997; color: white; }
+        .rel-rival { background: #fd7e14; color: white; }
+        .rel-neutral { background: #6c757d; color: white; }
+
+        .intimacy-bar {
+            flex: 1;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 0 15px;
+        }
+
+        .intimacy-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s;
+        }
+
+        .trait-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        .trait-name {
+            font-weight: bold;
+            min-width: 120px;
+        }
+
+        .trait-bar {
+            flex: 1;
+            height: 15px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 0 15px;
+        }
+
+        .trait-fill {
+            height: 100%;
+            background: #667eea;
+            transition: width 0.3s;
+        }
+
+        /* === 现代化角色追踪样式 === */
+        
+        .relationship-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .relationship-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            transition: all 0.3s;
+        }
+
+        .relationship-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+        }
+
+        .relationship-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .relationship-icon {
+            font-size: 24px;
+        }
+
+        .relationship-target {
+            font-size: 18px;
+            font-weight: bold;
+            flex: 1;
+        }
+
+        .relationship-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            color: white;
+        }
+
+        .intimacy-section {
+            margin-bottom: 15px;
+        }
+
+        .intimacy-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .intimacy-value {
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .intimacy-bar-modern {
+            height: 8px;
+            background: #e9ecef;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .intimacy-fill-modern {
+            height: 100%;
+            transition: width 0.5s ease;
+            border-radius: 4px;
+        }
+
+        .relationship-desc {
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        .relationship-desc p {
+            margin: 0;
+            color: #666;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .relationship-evolution {
+            padding-top: 10px;
+            border-top: 1px solid #e9ecef;
+        }
+
+        .relationship-history {
+            margin-top: 10px;
+        }
+
+        .btn-link {
+            background: none;
+            border: none;
+            color: #667eea;
+            cursor: pointer;
+            font-size: 13px;
+            text-decoration: underline;
+        }
+
+        .btn-link:hover {
+            color: #764ba2;
+        }
+
+        /* 关系历史时间线样式 */
+        
+        .history-timeline {
+            position: relative;
+            padding-left: 40px;
+            margin: 20px 0;
+        }
+
+        .history-timeline::before {
+            content: '';
+            position: absolute;
+            left: 15px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: linear-gradient(to bottom, #667eea, #764ba2);
+        }
+
+        .history-item {
+            position: relative;
+            margin-bottom: 25px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            transition: all 0.3s;
+        }
+
+        .history-item:hover {
+            background: #e9ecef;
+            transform: translateX(5px);
+        }
+
+        .history-item::before {
+            content: '';
+            position: absolute;
+            left: -31px;
+            top: 20px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #667eea;
+            border: 3px solid white;
+            box-shadow: 0 0 0 2px #667eea;
+        }
+
+        .history-chapter {
+            display: inline-block;
+            padding: 3px 10px;
+            background: #667eea;
+            color: white;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .history-change {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 10px 0;
+            font-size: 15px;
+        }
+
+        .history-value {
+            padding: 5px 12px;
+            background: white;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+
+        .history-arrow {
+            font-size: 18px;
+            color: #999;
+        }
+
+        .history-trend-up {
+            color: #4caf50;
+        }
+
+        .history-trend-down {
+            color: #f44336;
+        }
+
+        .history-reason {
+            margin-top: 10px;
+            padding: 10px;
+            background: white;
+            border-left: 3px solid #667eea;
+            border-radius: 4px;
+            color: #666;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        /* 角色选择器样式 */
+        
+        .character-selector {
+            position: relative;
+            margin-bottom: 30px;
+        }
+
+        .character-selector-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .character-selector-button {
+            width: 100%;
+            padding: 15px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: all 0.3s;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        .character-selector-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .character-selector-button .icon {
+            font-size: 24px;
+            margin-right: 10px;
+        }
+
+        .character-selector-button .text {
+            flex: 1;
+            text-align: left;
+        }
+
+        .character-selector-button .arrow {
+            font-size: 12px;
+            transition: transform 0.3s;
+        }
+
+        .character-selector-button.active .arrow {
+            transform: rotate(180deg);
+        }
+
+        .character-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+            margin-top: 8px;
+            max-height: 400px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+        }
+
+        .character-dropdown.active {
+            display: block;
+            animation: slideDown 0.3s ease;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .character-option {
+            padding: 15px 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .character-option:last-child {
+            border-bottom: none;
+        }
+
+        .character-option:hover {
+            background: #f8f9fa;
+        }
+
+        .character-option.selected {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+            border-left: 3px solid #667eea;
+        }
+
+        .character-option .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .character-option .info {
+            flex: 1;
+        }
+
+        .character-option .name {
+            font-weight: 600;
+            font-size: 15px;
+            color: #333;
+            margin-bottom: 2px;
+        }
+
+        .character-option .desc {
+            font-size: 12px;
+            color: #999;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* 创作模式选择器 */
+        
+        .mode-selector {
+            display: flex;
+            gap: 10px;
+            background: #f8f9fa;
+            padding: 5px;
+            border-radius: 12px;
+        }
+
+        .mode-btn {
+            flex: 1;
+            padding: 12px 20px;
+            border: none;
+            background: transparent;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 500;
+            color: #666;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .mode-btn:hover {
+            background: #e9ecef;
+        }
+
+        .mode-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        .creation-mode {
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 大纲卡片样式 */
+        
+        .outline-item {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            transition: all 0.3s;
+            border-left: 4px solid #e9ecef;
+        }
+
+        .outline-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+        }
+
+        .outline-item.status-planned {
+            border-left-color: #ffc107;
+        }
+
+        .outline-item.status-generated {
+            border-left-color: #2196f3;
+        }
+
+        .outline-item.status-completed {
+            border-left-color: #4caf50;
+        }
+
+        .outline-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .outline-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .outline-status-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-planned { background: #fff3cd; color: #856404; }
+        .status-generated { background: #cce5ff; color: #004085; }
+        .status-completed { background: #d4edda; color: #155724; }
+
+        .outline-summary {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+
+        .outline-events {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        .outline-events h5 {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .outline-events ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .outline-events li {
+            padding: 5px 0 5px 20px;
+            position: relative;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .outline-events li:before {
+            content: '▸';
+            position: absolute;
+            left: 0;
+            color: #667eea;
+        }
+
+        .outline-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .outline-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-box {
+            background: white;
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            text-align: center;
+        }
+
+        .stat-box .number {
+            font-size: 32px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 5px;
+        }
+
+        .stat-box .label {
+            font-size: 14px;
+            color: #999;
+        }
+
+        /* 性格特质现代化样式 */
+        
+        .personality-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .trait-card {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+            transition: all 0.3s;
+        }
+
+        .trait-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .trait-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .trait-name-modern {
+            font-weight: bold;
+            font-size: 15px;
+            color: #333;
+        }
+
+        .trait-trend {
+            font-size: 18px;
+        }
+
+        .trait-visual {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .trait-bar-modern {
+            flex: 1;
+            height: 6px;
+            background: #e9ecef;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .trait-fill-modern {
+            height: 100%;
+            transition: width 0.5s ease;
+            border-radius: 3px;
+        }
+
+        .trait-value {
+            font-weight: bold;
+            font-size: 14px;
+            min-width: 30px;
+            text-align: right;
+        }
+
+        .trait-desc, .trait-change {
+            font-size: 12px;
+            color: #666;
+            margin-top: 8px;
+        }
+
+        /* 性格演变时间线 */
+        
+        .personality-evolution {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 2px solid #e9ecef;
+        }
+
+        .evolution-timeline {
+            position: relative;
+            padding-left: 20px;
+        }
+
+        .evolution-item {
+            position: relative;
+            padding: 15px;
+            margin-bottom: 15px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+            border-left: 4px solid #4caf50;
+        }
+
+        .evolution-item.decrease {
+            border-left-color: #f44336;
+        }
+
+        .evolution-chapter {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 8px;
+        }
+
+        .evolution-trait {
+            font-weight: bold;
+            font-size: 15px;
+            margin-bottom: 8px;
+        }
+
+        .evolution-change {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .old-value {
+            color: #999;
+        }
+
+        .arrow {
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .new-value {
+            font-weight: bold;
+            color: #333;
+        }
+
+        .change-value {
+            font-size: 13px;
+            font-weight: bold;
+        }
+
+        .evolution-reason {
+            padding-top: 8px;
+            border-top: 1px solid #f0f0f0;
+            color: #666;
+            font-size: 13px;
+        }
+
+        .timeline-item {
+            position: relative;
+            padding-left: 40px;
+            padding-bottom: 25px;
+            border-left: 2px solid #e0e0e0;
+        }
+
+        .timeline-item:last-child {
+            border-left: none;
+        }
+
+        .timeline-dot {
+            position: absolute;
+            left: -8px;
+            top: 0;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #667eea;
+            border: 3px solid white;
+            box-shadow: 0 0 0 2px #e0e0e0;
+        }
+
+        .timeline-content {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .timeline-type {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 15px;
+            font-size: 0.85em;
+            margin-bottom: 5px;
+        }
+
+        .type-experience { background: #ffc107; color: #333; }
+        .type-relationship { background: #17a2b8; color: white; }
+        .type-personality { background: #6f42c1; color: white; }
+
+        .growth-stat {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        .growth-stat-label {
+            font-weight: 500;
+        }
+
+        .growth-stat-value {
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        /* 进度提示样式优化 */
+        #progressModal .spinner {
+            width: 60px;
+            height: 60px;
+            border-width: 6px;
+        }
+
+        #progressModal .loading {
+            padding: 30px;
+        }
+
+        #progressModal .modal-content {
+            animation: slideUp 0.4s ease-out;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        #progressTimer {
+            animation: pulse 2s infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📚 NovelGrok</h1>
+            <p>AI驱动的智能小说写作助手</p>
+            <div id="apiBalance" style="margin-top: 15px; font-size: 0.9em; opacity: 0.9;">
+                <span id="balanceInfo">正在检查API状态...</span>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="sidebar">
+                <button class="btn" style="width: 100%;" onclick="showCreateProjectModal()">
+                    ➕ 创建新项目
+                </button>
+                
+                <div class="project-list" id="projectList">
+                    <div class="loading active">
+                        <div class="spinner"></div>
+                        <p style="margin-top: 10px;">加载中...</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="content-area">
+                <div id="emptyState" class="empty-state">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
+                    </svg>
+                    <h2>选择一个项目开始</h2>
+                    <p>从左侧选择现有项目，或创建一个新项目</p>
+                </div>
+
+                <div id="projectContent" style="display: none;">
+                    <div class="tabs">
+                        <button class="tab active" onclick="switchTab('overview', event)">📊 概览</button>
+                        <button class="tab" onclick="switchTab('characters', event)">👥 角色</button>
+                        <button class="tab" onclick="switchTab('tracking', event)">📈 角色追踪</button>
+                        <button class="tab" onclick="switchTab('chapters', event)">📖 章节</button>
+                        <button class="tab" onclick="switchTab('ai', event)">🤖 AI创作</button>
+                    </div>
+
+                    <!-- 概览标签 -->
+                    <div id="overview" class="tab-content active">
+                        <div class="stats" id="stats"></div>
+                        
+                        <div class="card">
+                            <h3>项目信息</h3>
+                            <div id="projectInfo"></div>
+                            <button class="btn" onclick="showEditProjectModal()" style="margin-top: 15px;">编辑项目</button>
+                            <button class="btn btn-danger" onclick="deleteProject()" style="margin-top: 15px; margin-left: 10px;">删除项目</button>
+                        </div>
+                    </div>
+
+                    <!-- 角色标签 -->
+                    <div id="characters" class="tab-content">
+                        <div class="action-buttons">
+                            <button class="btn" onclick="showAddCharacterModal()">➕ 添加角色</button>
+                        </div>
+                        <div id="characterList"></div>
+                    </div>
+
+                    <!-- 角色追踪标签 -->
+                    <div id="tracking" class="tab-content">
+                        <div class="character-selector">
+                            <label class="character-selector-label">选择要查看的角色</label>
+                            <button class="character-selector-button" onclick="toggleCharacterDropdown()" id="characterSelectorButton">
+                                <span class="icon">👤</span>
+                                <span class="text" id="selectedCharacterText">请选择角色</span>
+                                <span class="arrow">▼</span>
+                            </button>
+                            <div class="character-dropdown" id="characterDropdown"></div>
+                        </div>
+
+                        <div id="trackingContent" style="display:none;">
+                            <!-- 关系网络图 -->
+                            <div class="card">
+                                <h3>🔗 关系网络</h3>
+                                <div id="relationshipNetwork"></div>
+                            </div>
+
+                            <!-- 性格特质 -->
+                            <div class="card">
+                                <h3>🧠 性格特质</h3>
+                                <div id="personalityTraits"></div>
+                            </div>
+
+                            <!-- 成长分析 -->
+                            <div class="card">
+                                <h3>📊 成长分析</h3>
+                                <div id="growthAnalysis"></div>
+                            </div>
+
+                            <!-- 时间线 -->
+                            <div class="card">
+                                <h3>⏰ 完整时间线</h3>
+                                <div id="characterTimeline"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 章节标签 -->
+                    <div id="chapters" class="tab-content">
+                        <div class="action-buttons">
+                            <button class="btn" onclick="showAddChapterModal()">➕ 手动添加章节</button>
+                        </div>
+                        <div id="chapterList"></div>
+                    </div>
+
+                    <!-- AI创作标签 -->
+                    <div id="ai" class="tab-content">
+                        <!-- 创作模式选择 -->
+                        <div class="mode-selector" style="margin-bottom: 20px;">
+                            <button class="mode-btn active" onclick="switchCreationMode('direct')" id="directModeBtn">
+                                ⚡ 直接生成
+                            </button>
+                            <button class="mode-btn" onclick="switchCreationMode('outline')" id="outlineModeBtn">
+                                📋 大纲模式
+                            </button>
+                        </div>
+
+                        <!-- 直接生成模式 -->
+                        <div id="directMode" class="creation-mode">
+                            <div class="card">
+                                <h3>🎯 生成新章节</h3>
+                                <p style="color: #666; margin-bottom: 15px;">
+                                    💡 <strong>说明</strong>：创建一个全新的章节，添加到小说末尾，推进故事发展
+                                </p>
+                            <div class="form-group">
+                                <label>章节标题（可选，AI会自动生成）</label>
+                                <div style="display: flex; gap: 10px;">
+                                    <input type="text" id="aiChapterTitle" placeholder="例如：第一次相遇" style="flex: 1;">
+                                    <button class="btn btn-secondary" onclick="generateChapterIdea()" style="white-space: nowrap; padding: 8px 15px;">
+                                        ✨ AI生成创意
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>写作提示</label>
+                                <textarea id="aiChapterPrompt" placeholder="描述你想要的情节、场景或风格..."></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label>目标字数</label>
+                                <input type="number" id="aiChapterLength" value="3500" min="500" max="20000" step="500">
+                                <p style="font-size: 0.9em; color: #666; margin-top: 5px;">
+                                    💡 推荐：1500-3000字（质量更好）。4000字以上生成时间较长。
+                                </p>
+                            </div>
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="aiGenerateSummary" checked>
+                                    自动生成摘要
+                                </label>
+                            </div>
+                            <button class="btn" id="generateChapterBtn" onclick="confirmAndGenerate()">🚀 生成章节</button>
+                            <p style="font-size: 0.9em; color: #999; margin-top: 10px; text-align: center;">
+                                ⏱️ 预计耗时：1-3分钟 · 生成期间可切换标签页
+                            </p>
+                        </div>
+                        </div>
+
+                        <!-- 大纲模式 -->
+                        <div id="outlineMode" class="creation-mode" style="display: none;">
+                            <!-- 大纲状态卡片 -->
+                            <div class="card" id="outlineStatusCard">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                                    <h3>📋 章节大纲</h3>
+                                    <div style="display: flex; gap: 10px;">
+                                        <button class="btn btn-secondary" onclick="showGenerateOutlineDialog()">
+                                            ✨ AI生成完整大纲
+                                        </button>
+                                        <button class="btn btn-secondary" id="appendOutlineBtn" onclick="showAppendOutlineDialog()" style="display: none;">
+                                            ➕ 继续生成
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="outlineStatus"></div>
+                                
+                                <!-- 批量操作工具栏 -->
+                                <div id="bulkActionBar" style="display: none; margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #667eea;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <span id="selectedCount" style="color: #667eea; font-weight: 500;">已选择 0 章</span>
+                                        <div style="display: flex; gap: 10px;">
+                                            <button class="btn btn-primary" onclick="showRegenerateRangeDialog()">
+                                                🔄 重新生成所选大纲
+                                            </button>
+                                            <button class="btn btn-secondary" onclick="clearSelection()">
+                                                取消选择
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 大纲列表 -->
+                            <div id="outlineList"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 创建项目模态框 -->
+    <div id="createProjectModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>创建新项目</h2>
+            </div>
+            <div class="form-group">
+                <label>项目标题 *</label>
+                <input type="text" id="newProjectTitle" required>
+            </div>
+            <div class="form-group">
+                <label>类型</label>
+                <input type="text" id="newProjectGenre" placeholder="例如：科幻、奇幻、悬疑...">
+            </div>
+            <div class="form-group">
+                <label>背景设定</label>
+                <textarea id="newProjectBackground" placeholder="描述故事的世界观和背景..."></textarea>
+            </div>
+            <div class="form-group">
+                <label>故事大纲</label>
+                <textarea id="newProjectOutline" placeholder="简要概述故事主线..."></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('createProjectModal')">取消</button>
+                <button class="btn" onclick="createProject()">创建</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑项目模态框 -->
+    <div id="editProjectModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>编辑项目</h2>
+            </div>
+            <div class="form-group">
+                <label>类型</label>
+                <input type="text" id="editProjectGenre">
+            </div>
+            <div class="form-group">
+                <label>背景设定</label>
+                <textarea id="editProjectBackground"></textarea>
+            </div>
+            <div class="form-group">
+                <label>故事大纲</label>
+                <textarea id="editProjectOutline"></textarea>
+            </div>
+            <div class="form-group">
+                <label>写作风格</label>
+                <input type="text" id="editProjectStyle" placeholder="例如：紧凑、悬疑、诗意...">
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('editProjectModal')">取消</button>
+                <button class="btn" onclick="updateProject()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加角色模态框 -->
+    <div id="addCharacterModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>添加角色</h2>
+            </div>
+            <div class="form-group">
+                <label>角色名称 *</label>
+                <input type="text" id="newCharName" required>
+            </div>
+            <div class="form-group">
+                <label>角色描述 *</label>
+                <textarea id="newCharDesc" placeholder="年龄、职业、外貌特征等..."></textarea>
+            </div>
+            <div class="form-group">
+                <label>性格特征</label>
+                <textarea id="newCharPersonality" placeholder="描述角色的性格特点..."></textarea>
+            </div>
+            <div class="form-group">
+                <label>角色背景</label>
+                <textarea id="newCharBackground" placeholder="角色的过往经历..."></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('addCharacterModal')">取消</button>
+                <button class="btn" onclick="addCharacter()">添加</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑角色模态框 -->
+    <div id="editCharacterModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>编辑角色</h2>
+            </div>
+            <div class="form-group">
+                <label>角色名称</label>
+                <input type="text" id="editCharName" readonly style="background: #f0f0f0;">
+            </div>
+            <div class="form-group">
+                <label>角色描述 *</label>
+                <textarea id="editCharDesc" placeholder="年龄、职业、外貌特征等..."></textarea>
+            </div>
+            <div class="form-group">
+                <label>性格特征</label>
+                <textarea id="editCharPersonality" placeholder="描述角色的性格特点..."></textarea>
+            </div>
+            <div class="form-group">
+                <label>角色背景</label>
+                <textarea id="editCharBackground" placeholder="角色的过往经历..."></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('editCharacterModal')">取消</button>
+                <button class="btn" onclick="updateCharacter()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加章节模态框 -->
+    <div id="addChapterModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>添加章节</h2>
+            </div>
+            <div class="form-group">
+                <label>章节标题 *</label>
+                <input type="text" id="newChapterTitle" required>
+            </div>
+            <div class="form-group">
+                <label>章节内容 *</label>
+                <textarea id="newChapterContent" style="min-height: 300px;" required></textarea>
+            </div>
+            <div class="form-group">
+                <label>章节摘要</label>
+                <textarea id="newChapterSummary"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('addChapterModal')">取消</button>
+                <button class="btn" onclick="addChapter()">添加</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 查看/编辑章节模态框 -->
+    <div id="viewChapterModal" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="modal-header">
+                <h2 id="viewChapterTitle"></h2>
+            </div>
+            <div class="form-group">
+                <label>章节内容</label>
+                <textarea id="editChapterContent" style="min-height: 400px;"></textarea>
+            </div>
+            <div class="form-group">
+                <label>章节摘要</label>
+                <textarea id="editChapterSummary"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="generateChapterSummary()">生成摘要</button>
+                <button class="btn btn-secondary" onclick="closeModal('viewChapterModal')">关闭</button>
+                <button class="btn" onclick="updateChapter()">保存修改</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 关系历史详情模态框 -->
+    <div id="relationshipHistoryModal" class="modal">
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header">
+                <h2>📊 关系变化历史</h2>
+            </div>
+            <div style="padding: 20px;">
+                <div id="relationshipHistoryContent"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('relationshipHistoryModal')">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 生成大纲配置模态框 -->
+    <div id="generateOutlineModal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2>✨ 生成章节大纲</h2>
+            </div>
+            <div style="padding: 20px;">
+                <div class="form-group">
+                    <label>章节数量：</label>
+                    <input type="number" id="outlineChapterCount" class="form-control" 
+                           value="30" min="1" max="100" style="width: 150px;">
+                    <small style="color: #999;">建议：20-50章，最多100章</small>
+                </div>
+                <div class="form-group" style="margin-top: 20px;">
+                    <label>平均章节字数：</label>
+                    <input type="number" id="outlineChapterLength" class="form-control" 
+                           value="3000" min="1000" max="10000" step="500" style="width: 150px;">
+                    <small style="color: #999;">建议：2000-5000字</small>
+                </div>
+                <div class="form-group" style="margin-top: 20px;">
+                    <label>故事目标/最终状态：</label>
+                    <textarea id="outlineStoryGoal" class="form-control" rows="3" 
+                              placeholder="例如：主角成为武林盟主，揭开真相并复仇成功，建立商业帝国等...&#10;&#10;可以留空，AI会根据小说设定自行规划"></textarea>
+                    <small style="color: #999;">设定故事的最终目标，让AI生成更有方向性的大纲</small>
+                </div>
+                <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #667eea;">
+                    <p style="margin: 0; color: #666; font-size: 14px;">
+                        ⏱️ 预计生成时间：<span id="estimatedTime">2-3分钟</span><br>
+                        💡 生成后可以对大纲进行编辑和调整
+                    </p>
+                </div>
+                <div id="existingOutlineWarning" style="display: none; margin-top: 15px; padding: 15px; background: #fff3cd; border-radius: 8px; border-left: 4px solid #ffc107;">
+                    <p style="margin: 0; color: #856404; font-size: 14px;">
+                        ⚠️ <strong>注意</strong><br>
+                        当前已有大纲数据，重新生成将清空所有旧大纲！
+                    </p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('generateOutlineModal')">取消</button>
+                <button class="btn btn-primary" onclick="confirmGenerateOutline()">开始生成</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑大纲模态框 -->
+    <div id="editOutlineModal" class="modal">
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header">
+                <h2>✏️ 编辑章节大纲</h2>
+            </div>
+            <div style="padding: 20px;">
+                <input type="hidden" id="editOutlineChapterNumber">
+                
+                <div class="form-group">
+                    <label>章节标题：</label>
+                    <input type="text" id="editOutlineTitle" class="form-control" 
+                           placeholder="简洁有力的章节标题">
+                </div>
+                
+                <div class="form-group" style="margin-top: 15px;">
+                    <label>章节概要：</label>
+                    <textarea id="editOutlineSummary" class="form-control" rows="4" 
+                              placeholder="描述主要情节走向（80-150字）"></textarea>
+                </div>
+                
+                <div class="form-group" style="margin-top: 15px;">
+                    <label>关键事件：</label>
+                    <textarea id="editOutlineKeyEvents" class="form-control" rows="5" 
+                              placeholder="每行一个关键事件，例如：&#10;主角遇到神秘老人&#10;获得重要线索&#10;与反派初次交锋"></textarea>
+                    <small style="color: #999;">每行一个事件</small>
+                </div>
+                
+                <div class="form-group" style="margin-top: 15px;">
+                    <label>涉及角色：</label>
+                    <input type="text" id="editOutlineCharacters" class="form-control" 
+                           placeholder="用逗号分隔，例如：张三,李四,王五">
+                    <small style="color: #999;">用逗号分隔多个角色</small>
+                </div>
+                
+                <div class="form-group" style="margin-top: 15px;">
+                    <label>目标字数：</label>
+                    <input type="number" id="editOutlineTargetLength" class="form-control" 
+                           value="3000" min="1000" max="10000" step="500" style="width: 150px;">
+                </div>
+                
+                <div class="form-group" style="margin-top: 15px;">
+                    <label>创作要点：</label>
+                    <textarea id="editOutlineNotes" class="form-control" rows="3" 
+                              placeholder="创作时需要注意的要点（可选）"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('editOutlineModal')">取消</button>
+                <button class="btn btn-primary" onclick="saveOutlineEdit()">保存修改</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 重新生成范围大纲模态框 -->
+    <div id="regenerateRangeModal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2>🔄 重新生成大纲</h2>
+            </div>
+            <div style="padding: 20px;">
+                <div style="padding: 15px; background: #fff3cd; border-radius: 8px; border-left: 4px solid #ffc107; margin-bottom: 20px;">
+                    <p style="margin: 0; color: #856404; font-size: 14px;">
+                        ⚠️ <strong>警告</strong><br>
+                        重新生成将覆盖所选章节的原有大纲数据，此操作不可撤销！<br>
+                        已选择章节：<span id="regenerateChapterRange" style="font-weight: 600;"></span>
+                    </p>
+                </div>
+                
+                <div class="form-group">
+                    <label>阶段目标/要达到的状态：</label>
+                    <textarea id="regenerateStageGoal" class="form-control" rows="3" 
+                              placeholder="例如：主角掌握核心技能、揭开第一层真相、与反派正式对立等...&#10;&#10;可以留空，AI会根据整体故事目标自行规划"></textarea>
+                    <small style="color: #999;">设定这几章的阶段性目标，让大纲更有针对性</small>
+                </div>
+                
+                <div class="form-group" style="margin-top: 15px;">
+                    <label>平均章节字数：</label>
+                    <input type="number" id="regenerateChapterLength" class="form-control" 
+                           value="3000" min="1000" max="10000" step="500" style="width: 150px;">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('regenerateRangeModal')">取消</button>
+                <button class="btn btn-danger" onclick="confirmRegenerateRange()">确认重新生成</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 追加大纲模态框 -->
+    <div id="appendOutlineModal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2>➕ 继续生成大纲</h2>
+            </div>
+            <div style="padding: 20px;">
+                <div style="padding: 15px; background: #e7f3ff; border-radius: 8px; border-left: 4px solid #2196F3; margin-bottom: 20px;">
+                    <p style="margin: 0; color: #0d47a1; font-size: 14px;">
+                        💡 <strong>续写大纲</strong><br>
+                        当前已有：<span id="currentOutlineCount" style="font-weight: 600;">0</span> 章大纲<br>
+                        AI将基于现有大纲内容，继续规划后续章节
+                    </p>
+                </div>
+                
+                <div class="form-group">
+                    <label>追加章节数：</label>
+                    <input type="number" id="appendChapterCount" class="form-control" 
+                           value="10" min="1" max="50" style="width: 150px;">
+                    <small style="color: #999;">建议一次追加10-20章</small>
+                </div>
+                
+                <div class="form-group" style="margin-top: 15px;">
+                    <label>续写部分的目标：</label>
+                    <textarea id="appendStoryGoal" class="form-control" rows="3" 
+                              placeholder="例如：最终击败反派、完成复仇计划、达成终极目标等...&#10;&#10;可以留空，AI会延续之前的故事目标"></textarea>
+                    <small style="color: #999;">设定续写部分要达到的最终状态</small>
+                </div>
+                
+                <div class="form-group" style="margin-top: 15px;">
+                    <label>平均章节字数：</label>
+                    <input type="number" id="appendChapterLength" class="form-control" 
+                           value="3000" min="1000" max="10000" step="500" style="width: 150px;">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('appendOutlineModal')">取消</button>
+                <button class="btn btn-primary" onclick="confirmAppendOutline()">开始生成</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小说阅读器 - NovelGrok</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        /* 主题配色 */
+        body.theme-light {
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        body.theme-dark {
+            background-color: #1e1e1e;
+            color: #e0e0e0;
+        }
+
+        body.theme-sepia {
+            background-color: #f4ecd8;
+            color: #5c4a3a;
+        }
+
+        body.theme-green {
+            background-color: #cce8cc;
+            color: #2d4a2d;
+        }
+
+        body.theme-pink {
+            background-color: #fff0f5;
+            color: #4a2d3a;
+        }
+
+        /* 顶部工具栏 */
+        .toolbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
+        }
+
+        body.theme-dark .toolbar {
+            background: rgba(30, 30, 30, 0.95);
+        }
+
+        body.theme-sepia .toolbar {
+            background: rgba(244, 236, 216, 0.95);
+        }
+
+        body.theme-green .toolbar {
+            background: rgba(204, 232, 204, 0.95);
+        }
+
+        body.theme-pink .toolbar {
+            background: rgba(255, 240, 245, 0.95);
+        }
+
+        .toolbar-left,
+        .toolbar-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .toolbar-center {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .toolbar button,
+        .toolbar select {
+            padding: 8px 15px;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        body.theme-dark .toolbar button,
+        body.theme-dark .toolbar select {
+            background: #333;
+            border-color: #555;
+            color: #e0e0e0;
+        }
+
+        body.theme-sepia .toolbar button,
+        body.theme-sepia .toolbar select {
+            background: #f4ecd8;
+            border-color: #d4c4a8;
+            color: #5c4a3a;
+        }
+
+        body.theme-green .toolbar button,
+        body.theme-green .toolbar select {
+            background: #cce8cc;
+            border-color: #aac8aa;
+            color: #2d4a2d;
+        }
+
+        body.theme-pink .toolbar button,
+        body.theme-pink .toolbar select {
+            background: #fff0f5;
+            border-color: #ffcce0;
+            color: #4a2d3a;
+        }
+
+        .toolbar button:hover {
+            background: #f0f0f0;
+            transform: translateY(-1px);
+        }
+
+        body.theme-dark .toolbar button:hover {
+            background: #444;
+        }
+
+        .toolbar button:active {
+            transform: translateY(0);
+        }
+
+        .theme-btn {
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            border: 2px solid #ddd;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .theme-btn:hover {
+            transform: scale(1.1);
+        }
+
+        .theme-btn.active {
+            border-width: 3px;
+            border-color: #4CAF50;
+        }
+
+        .theme-light-btn { background: #ffffff; }
+        .theme-dark-btn { background: #1e1e1e; }
+        .theme-sepia-btn { background: #f4ecd8; }
+        .theme-green-btn { background: #cce8cc; }
+        .theme-pink-btn { background: #fff0f5; }
+
+        /* 阅读内容区域 */
+        .reader-container {
+            max-width: 800px;
+            margin: 80px auto 50px;
+            padding: 40px;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            min-height: calc(100vh - 130px);
+        }
+
+        body.theme-dark .reader-container {
+            background: rgba(40, 40, 40, 0.8);
+        }
+
+        body.theme-sepia .reader-container {
+            background: rgba(255, 255, 255, 0.6);
+        }
+
+        body.theme-green .reader-container {
+            background: rgba(255, 255, 255, 0.6);
+        }
+
+        body.theme-pink .reader-container {
+            background: rgba(255, 255, 255, 0.6);
+        }
+
+        .chapter-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #eee;
+        }
+
+        body.theme-dark .chapter-nav {
+            border-color: #555;
+        }
+
+        .chapter-title {
+            font-size: 28px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .chapter-info {
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+
+        body.theme-dark .chapter-info {
+            color: #999;
+        }
+
+        .chapter-content {
+            line-height: 1.8;
+            text-align: justify;
+            font-size: 18px;
+            letter-spacing: 0.5px;
+            transition: font-size 0.3s, line-height 0.3s;
+        }
+
+        .chapter-content p {
+            margin-bottom: 1.5em;
+            text-indent: 2em;
+        }
+
+        /* 字体大小类 */
+        .font-xs .chapter-content { font-size: 14px; line-height: 1.6; }
+        .font-sm .chapter-content { font-size: 16px; line-height: 1.7; }
+        .font-md .chapter-content { font-size: 18px; line-height: 1.8; }
+        .font-lg .chapter-content { font-size: 20px; line-height: 1.9; }
+        .font-xl .chapter-content { font-size: 22px; line-height: 2.0; }
+        .font-xxl .chapter-content { font-size: 24px; line-height: 2.1; }
+
+        /* 导航按钮 */
+        .nav-btn {
+            padding: 10px 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .nav-btn:hover {
+            background: #45a049;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .nav-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* 进度条 */
+        .progress-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: #f0f0f0;
+            z-index: 999;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #8BC34A);
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        /* 设置面板 */
+        .settings-panel {
+            position: fixed;
+            top: 70px;
+            right: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            padding: 20px;
+            display: none;
+            z-index: 999;
+            min-width: 300px;
+        }
+
+        body.theme-dark .settings-panel {
+            background: #2a2a2a;
+        }
+
+        .settings-panel.show {
+            display: block;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .settings-group {
+            margin-bottom: 20px;
+        }
+
+        .settings-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .settings-label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .theme-options {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .font-size-slider {
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        .font-size-value {
+            text-align: center;
+            margin-top: 5px;
+            font-size: 12px;
+            color: #666;
+        }
+
+        body.theme-dark .font-size-value {
+            color: #999;
+        }
+
+        /* 目录面板 */
+        .toc-panel {
+            position: fixed;
+            top: 70px;
+            left: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            padding: 20px;
+            display: none;
+            z-index: 999;
+            max-width: 300px;
+            max-height: calc(100vh - 120px);
+            overflow-y: auto;
+        }
+
+        body.theme-dark .toc-panel {
+            background: #2a2a2a;
+        }
+
+        .toc-panel.show {
+            display: block;
+            animation: slideIn 0.3s ease;
+        }
+
+        .toc-item {
+            padding: 10px;
+            margin-bottom: 5px;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: all 0.3s;
+        }
+
+        .toc-item:hover {
+            background: #f0f0f0;
+        }
+
+        body.theme-dark .toc-item:hover {
+            background: #3a3a3a;
+        }
+
+        .toc-item.active {
+            background: #4CAF50;
+            color: white;
+        }
+
+        /* 加载动画 */
+        .loading {
+            text-align: center;
+            padding: 50px;
+            font-size: 18px;
+            color: #666;
+        }
+
+        body.theme-dark .loading {
+            color: #999;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .reader-container {
+                padding: 20px;
+                margin: 70px 10px 30px;
+            }
+
+            .toolbar {
+                padding: 8px 10px;
+                flex-wrap: wrap;
+            }
+
+            .toolbar-center {
+                order: 3;
+                width: 100%;
+                justify-content: center;
+                margin-top: 10px;
+            }
+
+            .chapter-title {
+                font-size: 22px;
+            }
+
+            .settings-panel,
+            .toc-panel {
+                left: 10px;
+                right: 10px;
+                max-width: none;
+            }
+        }
+
+        /* 返回按钮特殊样式 */
+        .back-btn {
+            background: #2196F3;
+        }
+
+        .back-btn:hover {
+            background: #1976D2;
+        }
+    </style>
+</head>
+<body class="theme-light font-md">
+    <!-- 工具栏 -->
+    <div class="toolbar">
+        <div class="toolbar-left">
+            <button class="back-btn" onclick="goBack()">← 返回</button>
+            <button onclick="toggleTOC()">📚 目录</button>
+        </div>
+        
+        <div class="toolbar-center">
+            <button onclick="prevChapter()">上一章</button>
+            <select id="chapterSelect" onchange="jumpToChapter()">
+                <option value="">选择章节...</option>
+            </select>
+            <button onclick="nextChapter()">下一章</button>
+        </div>
+        
+        <div class="toolbar-right">
+            <button onclick="toggleSettings()">⚙️ 设置</button>
+        </div>
+    </div>
+
+    <!-- 设置面板 -->
+    <div class="settings-panel" id="settingsPanel">
+        <div class="settings-group">
+            <div class="settings-label">🎨 主题配色</div>
+            <div class="theme-options">
+                <button class="theme-btn theme-light-btn active" onclick="changeTheme('light')" title="亮色"></button>
+                <button class="theme-btn theme-dark-btn" onclick="changeTheme('dark')" title="暗色"></button>
+                <button class="theme-btn theme-sepia-btn" onclick="changeTheme('sepia')" title="护眼"></button>
+                <button class="theme-btn theme-green-btn" onclick="changeTheme('green')" title="绿色"></button>
+                <button class="theme-btn theme-pink-btn" onclick="changeTheme('pink')" title="粉色"></button>
+            </div>
+        </div>
+
+        <div class="settings-group">
+            <div class="settings-label">📏 字体大小</div>
+            <input type="range" class="font-size-slider" min="0" max="5" value="2" 
+                   oninput="changeFontSize(this.value)">
+            <div class="font-size-value" id="fontSizeValue">中等</div>
+        </div>
+
+        <div class="settings-group">
+            <div class="settings-label">📖 阅读宽度</div>
+            <select onchange="changeWidth(this.value)" style="width: 100%;">
+                <option value="700">窄 (700px)</option>
+                <option value="800" selected>中 (800px)</option>
+                <option value="1000">宽 (1000px)</option>
+                <option value="1200">超宽 (1200px)</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- 目录面板 -->
+    <div class="toc-panel" id="tocPanel">
+        <div class="settings-label">📚 章节目录</div>
+        <div id="tocList"></div>
+    </div>
+
+    <!-- 阅读内容 -->
+    <div class="reader-container">
+        <div id="content">
+            <div class="loading">正在加载...</div>
+        </div>
+    </div>
+
+    <!-- 进度条 -->
+    <div class="progress-bar">
+        <div class="progress-fill" id="progressFill"></div>
+    </div>
+
+    <script>
+        let currentProject = null;
+        let currentChapterIndex = 0;
+        let chapters = [];
+
+        // 从URL参数获取项目和章节信息
+        const urlParams = new URLSearchParams(window.location.search);
+        const projectTitle = urlParams.get('project');
+        const chapterNumber = parseInt(urlParams.get('chapter') || '1');
+
+        // 初始化
+        async function init() {
+            if (!projectTitle) {
+                document.getElementById('content').innerHTML = '<div class="loading">❌ 未指定项目</div>';
+                return;
+            }
+
+            // 加载项目
+            await loadProject();
+            
+            // 加载设置
+            loadSettings();
+            
+            // 加载指定章节
+            const chapterIndex = chapters.findIndex(ch => ch.chapter_number === chapterNumber);
+            if (chapterIndex >= 0) {
+                currentChapterIndex = chapterIndex;
+            }
+            await loadChapter(currentChapterIndex);
+            
+            // 初始化目录
+            initTOC();
+            
+            // 监听滚动
+            window.addEventListener('scroll', updateProgress);
+        }
+
+        // 加载项目
+        async function loadProject() {
+            try {
+                const response = await fetch(`/api/projects/${encodeURIComponent(projectTitle)}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    currentProject = result.data;
+                    chapters = currentProject.chapters || [];
+                    
+                    // 填充章节选择器
+                    const select = document.getElementById('chapterSelect');
+                    chapters.forEach((ch, index) => {
+                        const option = document.createElement('option');
+                        option.value = index;
+                        option.textContent = `第${ch.chapter_number}章 ${ch.title}`;
+                        select.appendChild(option);
+                    });
+                } else {
+                    throw new Error(result.error || '加载失败');
+                }
+            } catch (error) {
+                document.getElementById('content').innerHTML = `<div class="loading">❌ ${error.message}</div>`;
+            }
+        }
+
+        // 加载章节
+        async function loadChapter(index) {
+            if (index < 0 || index >= chapters.length) return;
+            
+            currentChapterIndex = index;
+            const chapter = chapters[index];
+            
+            // 更新URL
+            const newUrl = `${window.location.pathname}?project=${encodeURIComponent(projectTitle)}&chapter=${chapter.chapter_number}`;
+            window.history.pushState({}, '', newUrl);
+            
+            // 显示内容
+            const contentDiv = document.getElementById('content');
+            contentDiv.innerHTML = `
+                <div class="chapter-title">${chapter.title}</div>
+                <div class="chapter-info">
+                    第 ${chapter.chapter_number} 章 · 共 ${chapter.word_count || 0} 字
+                </div>
+                <div class="chapter-content">${formatContent(chapter.content)}</div>
+            `;
+            
+            // 更新章节选择器
+            document.getElementById('chapterSelect').value = index;
+            
+            // 滚动到顶部
+            window.scrollTo(0, 0);
+            
+            // 更新目录激活状态
+            updateTOCActive();
+        }
+
+        // 格式化内容
+        function formatContent(content) {
+            if (!content) return '<p>暂无内容</p>';
+            
+            // 按段落分割，过滤空行
+            const paragraphs = content.split('\n')
+                .map(p => p.trim())
+                .filter(p => p.length > 0 && p !== '---');
+            
+            return paragraphs.map(p => `<p>${p}</p>`).join('');
+        }
+
+        // 切换主题
+        function changeTheme(theme) {
+            document.body.className = document.body.className.replace(/theme-\w+/, `theme-${theme}`);
+            
+            // 更新按钮状态
+            document.querySelectorAll('.theme-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelector(`.theme-${theme}-btn`).classList.add('active');
+            
+            // 保存设置
+            saveSettings();
+        }
+
+        // 改变字体大小
+        function changeFontSize(value) {
+            const sizes = ['xs', 'sm', 'md', 'lg', 'xl', 'xxl'];
+            const labels = ['极小', '较小', '中等', '较大', '大', '极大'];
+            
+            document.body.className = document.body.className.replace(/font-\w+/, `font-${sizes[value]}`);
+            document.getElementById('fontSizeValue').textContent = labels[value];
+            
+            saveSettings();
+        }
+
+        // 改变阅读宽度
+        function changeWidth(width) {
+            document.querySelector('.reader-container').style.maxWidth = width + 'px';
+            saveSettings();
+        }
+
+        // 切换设置面板
+        function toggleSettings() {
+            const panel = document.getElementById('settingsPanel');
+            panel.classList.toggle('show');
+            
+            // 关闭目录
+            document.getElementById('tocPanel').classList.remove('show');
+        }
+
+        // 切换目录
+        function toggleTOC() {
+            const panel = document.getElementById('tocPanel');
+            panel.classList.toggle('show');
+            
+            // 关闭设置
+            document.getElementById('settingsPanel').classList.remove('show');
+        }
+
+        // 初始化目录
+        function initTOC() {
+            const tocList = document.getElementById('tocList');
+            tocList.innerHTML = chapters.map((ch, index) => `
+                <div class="toc-item" onclick="loadChapter(${index})">
+                    第${ch.chapter_number}章 ${ch.title}
+                </div>
+            `).join('');
+        }
+
+        // 更新目录激活状态
+        function updateTOCActive() {
+            document.querySelectorAll('.toc-item').forEach((item, index) => {
+                item.classList.toggle('active', index === currentChapterIndex);
+            });
+        }
+
+        // 章节导航
+        function prevChapter() {
+            if (currentChapterIndex > 0) {
+                loadChapter(currentChapterIndex - 1);
+            }
+        }
+
+        function nextChapter() {
+            if (currentChapterIndex < chapters.length - 1) {
+                loadChapter(currentChapterIndex + 1);
+            }
+        }
+
+        function jumpToChapter() {
+            const select = document.getElementById('chapterSelect');
+            const index = parseInt(select.value);
+            if (!isNaN(index)) {
+                loadChapter(index);
+            }
+        }
+
+        // 更新阅读进度
+        function updateProgress() {
+            const windowHeight = window.innerHeight;
+            const documentHeight = document.documentElement.scrollHeight;
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            
+            const progress = (scrollTop / (documentHeight - windowHeight)) * 100;
+            document.getElementById('progressFill').style.width = Math.min(progress, 100) + '%';
+        }
+
+        // 保存设置
+        function saveSettings() {
+            const settings = {
+                theme: document.body.className.match(/theme-(\w+)/)?.[1] || 'light',
+                fontSize: document.body.className.match(/font-(\w+)/)?.[1] || 'md',
+                width: document.querySelector('.reader-container').style.maxWidth || '800px'
+            };
+            localStorage.setItem('readerSettings', JSON.stringify(settings));
+        }
+
+        // 加载设置
+        function loadSettings() {
+            try {
+                const settings = JSON.parse(localStorage.getItem('readerSettings') || '{}');
+                
+                if (settings.theme) {
+                    changeTheme(settings.theme);
+                }
+                
+                if (settings.fontSize) {
+                    const sizes = ['xs', 'sm', 'md', 'lg', 'xl', 'xxl'];
+                    const index = sizes.indexOf(settings.fontSize);
+                    if (index >= 0) {
+                        changeFontSize(index);
+                        document.querySelector('.font-size-slider').value = index;
+                    }
+                }
+                
+                if (settings.width) {
+                    document.querySelector('.reader-container').style.maxWidth = settings.width;
+                }
+            } catch (e) {
+                console.error('加载设置失败:', e);
+            }
+        }
+
+        // 返回主界面
+        function goBack() {
+            window.location.href = '/';
+        }
+
+        // 键盘快捷键
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') {
+                prevChapter();
+            } else if (e.key === 'ArrowRight') {
+                nextChapter();
+            } else if (e.key === 'Escape') {
+                document.getElementById('settingsPanel').classList.remove('show');
+                document.getElementById('tocPanel').classList.remove('show');
+            }
+        });
+
+        // 点击页面其他地方关闭面板
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.settings-panel') && !e.target.closest('.toolbar')) {
+                document.getElementById('settingsPanel').classList.remove('show');
+            }
+            if (!e.target.closest('.toc-panel') && !e.target.closest('.toolbar')) {
+                document.getElementById('tocPanel').classList.remove('show');
+            }
+        });
+
+        // 启动
+        init();
+    </script>
+</body>
+</html>
