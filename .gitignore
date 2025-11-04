@@ -34,3 +34,4 @@ wheels/
 # 项目特定
 output/
 *.txt.backup
+projects/
