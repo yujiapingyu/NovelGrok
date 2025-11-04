@@ -576,14 +576,14 @@ function updateImportContentSize() {
     const kbSize = (byteSize / 1024).toFixed(2);
     const mbSize = (byteSize / (1024 * 1024)).toFixed(2);
     
-    let sizeText = `${charCount} 字符 (${kbSize} KB)`;
+    let sizeText;
     let colorStyle = '';
     
     if (byteSize > 1024 * 1024) {
-        sizeText = `${charCount} 字符 (${mbSize} MB) - ⚠️ 超过1MB限制`;
-        colorStyle = 'color: #dc3545;';
-    } else if (byteSize > 900 * 1024) {
-        colorStyle = 'color: #ff9800;';
+        sizeText = `${charCount} 字符 (${mbSize} MB)`;
+        colorStyle = 'color: #667eea;';  // 紫色，表示大文件但不限制
+    } else {
+        sizeText = `${charCount} 字符 (${kbSize} KB)`;
     }
     
     sizeElement.innerHTML = sizeText;
@@ -613,13 +613,6 @@ async function previewImport() {
     
     if (!content) {
         alert('请输入小说内容');
-        return;
-    }
-    
-    // 检查大小
-    const byteSize = new Blob([content]).size;
-    if (byteSize > 1024 * 1024) {
-        alert('小说内容超过1MB限制，请精简内容后再试');
         return;
     }
     

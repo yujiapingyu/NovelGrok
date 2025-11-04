@@ -110,6 +110,7 @@ def get_project(project_title):
                 'plot_points': project.plot_points,
                 'status': status,
                 'context_analysis': analysis,
+                'character_tracker': project.character_tracker.to_dict(),  # 添加角色追踪数据
             }
         })
     except FileNotFoundError:
@@ -1404,7 +1405,7 @@ def import_novel(project_title):
         
         # 使用导入器处理小说
         from novel_ai.utils.novel_importer import NovelImporter
-        importer = NovelImporter(max_file_size=1024 * 1024)  # 1MB
+        importer = NovelImporter(max_file_size=None)  # 不限制大小
         
         success, chapters, error = importer.import_novel(novel_content)
         

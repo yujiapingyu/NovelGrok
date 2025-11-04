@@ -383,6 +383,180 @@
             animation: slideIn 0.3s ease;
         }
 
+        /* 角色追踪面板 */
+        .character-panel {
+            position: fixed;
+            top: 70px;
+            right: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            padding: 20px;
+            display: none;
+            z-index: 998;
+            width: 400px;
+            max-height: calc(100vh - 120px);
+            overflow-y: auto;
+        }
+
+        body.theme-dark .character-panel {
+            background: #2a2a2a;
+        }
+
+        .character-panel.show {
+            display: block;
+            animation: slideIn 0.3s ease;
+        }
+
+        .character-card {
+            background: #f9f9f9;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-left: 4px solid #4CAF50;
+        }
+
+        body.theme-dark .character-card {
+            background: #333;
+        }
+
+        .character-name {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #4CAF50;
+        }
+
+        .character-section {
+            margin-bottom: 12px;
+        }
+
+        .character-section-title {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 6px;
+            color: #666;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        body.theme-dark .character-section-title {
+            color: #aaa;
+        }
+
+        .character-section-content {
+            font-size: 13px;
+            line-height: 1.6;
+            color: #555;
+            padding-left: 20px;
+        }
+
+        body.theme-dark .character-section-content {
+            color: #ccc;
+        }
+
+        .experience-item {
+            background: #fff;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-left: 3px solid #2196F3;
+        }
+
+        body.theme-dark .experience-item {
+            background: #2a2a2a;
+        }
+
+        .experience-type {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: bold;
+            margin-right: 6px;
+        }
+
+        .exp-achievement { background: #4CAF50; color: white; }
+        .exp-conflict { background: #f44336; color: white; }
+        .exp-relationship { background: #2196F3; color: white; }
+        .exp-growth { background: #FF9800; color: white; }
+        .exp-trauma { background: #9C27B0; color: white; }
+
+        .experience-desc {
+            font-size: 13px;
+            margin-top: 6px;
+            line-height: 1.5;
+        }
+
+        .experience-meta {
+            font-size: 11px;
+            color: #999;
+            margin-top: 6px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+        }
+
+        .relationship-item {
+            background: #fff;
+            border-radius: 6px;
+            padding: 8px;
+            margin-bottom: 6px;
+            font-size: 13px;
+        }
+
+        body.theme-dark .relationship-item {
+            background: #2a2a2a;
+        }
+
+        .relationship-target {
+            font-weight: bold;
+            color: #2196F3;
+        }
+
+        .intimacy-bar {
+            height: 6px;
+            background: #e0e0e0;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 4px;
+        }
+
+        .intimacy-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #8BC34A);
+            transition: width 0.3s;
+        }
+
+        .trait-item {
+            display: inline-block;
+            background: #fff;
+            border-radius: 12px;
+            padding: 4px 10px;
+            margin: 3px;
+            font-size: 12px;
+            border: 1px solid #ddd;
+        }
+
+        body.theme-dark .trait-item {
+            background: #2a2a2a;
+            border-color: #555;
+        }
+
+        .no-data {
+            text-align: center;
+            color: #999;
+            padding: 20px;
+            font-size: 14px;
+        }
+
         .toc-item {
             padding: 10px;
             margin-bottom: 5px;
@@ -440,10 +614,12 @@
             }
 
             .settings-panel,
-            .toc-panel {
+            .toc-panel,
+            .character-panel {
                 left: 10px;
                 right: 10px;
                 max-width: none;
+                width: auto;
             }
         }
 
@@ -474,6 +650,7 @@
         </div>
         
         <div class="toolbar-right">
+            <button onclick="toggleCharacters()">👥 角色追踪</button>
             <button onclick="toggleSettings()">⚙️ 设置</button>
         </div>
     </div>
@@ -513,6 +690,14 @@
     <div class="toc-panel" id="tocPanel">
         <div class="settings-label">📚 章节目录</div>
         <div id="tocList"></div>
+    </div>
+
+    <!-- 角色追踪面板 -->
+    <div class="character-panel" id="characterPanel">
+        <div class="settings-label">👥 本章角色动态</div>
+        <div id="characterList">
+            <div class="no-data">正在加载...</div>
+        </div>
     </div>
 
     <!-- 阅读内容 -->
@@ -619,6 +804,11 @@
             
             // 更新目录激活状态
             updateTOCActive();
+            
+            // 如果角色追踪面板是打开的，重新加载角色信息
+            if (document.getElementById('characterPanel').classList.contains('show')) {
+                loadCharacterTracking();
+            }
         }
 
         // 格式化内容
@@ -676,8 +866,24 @@
             const panel = document.getElementById('tocPanel');
             panel.classList.toggle('show');
             
-            // 关闭设置
+            // 关闭其他面板
             document.getElementById('settingsPanel').classList.remove('show');
+            document.getElementById('characterPanel').classList.remove('show');
+        }
+
+        // 切换角色追踪面板
+        function toggleCharacters() {
+            const panel = document.getElementById('characterPanel');
+            panel.classList.toggle('show');
+            
+            // 关闭其他面板
+            document.getElementById('settingsPanel').classList.remove('show');
+            document.getElementById('tocPanel').classList.remove('show');
+            
+            // 如果打开面板，加载角色信息
+            if (panel.classList.contains('show')) {
+                loadCharacterTracking();
+            }
         }
 
         // 初始化目录
@@ -764,6 +970,233 @@
             }
         }
 
+        // 加载角色追踪信息
+        async function loadCharacterTracking() {
+            const listDiv = document.getElementById('characterList');
+            listDiv.innerHTML = '<div class="no-data">正在加载...</div>';
+            
+            if (!currentProject || !currentProject.character_tracker) {
+                listDiv.innerHTML = '<div class="no-data">暂无角色追踪数据</div>';
+                return;
+            }
+            
+            const chapter = chapters[currentChapterIndex];
+            const tracker = currentProject.character_tracker;
+            const chapterNum = chapter.chapter_number;
+            
+            // 收集本章涉及的角色
+            const chapterCharacters = new Set();
+            
+            // 从经历中找角色
+            if (tracker.experiences) {
+                Object.keys(tracker.experiences).forEach(charName => {
+                    const exps = tracker.experiences[charName].filter(e => e.chapter_number === chapterNum);
+                    if (exps.length > 0) {
+                        chapterCharacters.add(charName);
+                    }
+                });
+            }
+            
+            // 从关系变化中找角色
+            if (tracker.relationships) {
+                Object.keys(tracker.relationships).forEach(charName => {
+                    const rels = tracker.relationships[charName];
+                    rels.forEach(rel => {
+                        if (rel.evolution_history) {
+                            const hasChange = rel.evolution_history.some(h => h.chapter === chapterNum);
+                            if (hasChange) {
+                                chapterCharacters.add(charName);
+                            }
+                        }
+                    });
+                });
+            }
+            
+            if (chapterCharacters.size === 0) {
+                listDiv.innerHTML = '<div class="no-data">本章暂无角色追踪记录</div>';
+                return;
+            }
+            
+            // 为每个角色生成卡片
+            let html = '';
+            chapterCharacters.forEach(charName => {
+                html += generateCharacterCard(charName, chapterNum, tracker);
+            });
+            
+            listDiv.innerHTML = html;
+        }
+        
+        // 生成角色卡片HTML
+        function generateCharacterCard(charName, chapterNum, tracker) {
+            let html = `<div class="character-card">`;
+            html += `<div class="character-name">👤 ${charName}</div>`;
+            
+            // 1. 本章经历
+            const experiences = tracker.experiences[charName]?.filter(e => e.chapter_number === chapterNum) || [];
+            if (experiences.length > 0) {
+                html += `<div class="character-section">`;
+                html += `<div class="character-section-title">📝 本章经历 (${experiences.length})</div>`;
+                html += `<div class="character-section-content">`;
+                experiences.forEach(exp => {
+                    html += `<div class="experience-item">`;
+                    html += `<div>`;
+                    html += `<span class="experience-type exp-${exp.event_type}">${getEventTypeLabel(exp.event_type)}</span>`;
+                    html += `<span style="font-size: 11px; color: #999;">影响: ${getImpactLabel(exp.impact)}</span>`;
+                    html += `</div>`;
+                    html += `<div class="experience-desc">${truncate(exp.description, 120)}</div>`;
+                    
+                    // 显示新字段信息
+                    if (exp.context || exp.emotional_state || exp.location) {
+                        html += `<div class="experience-meta">`;
+                        if (exp.location) {
+                            html += `<div class="meta-item">📍 ${exp.location}</div>`;
+                        }
+                        if (exp.emotional_state) {
+                            html += `<div class="meta-item">💭 ${truncate(exp.emotional_state, 40)}</div>`;
+                        }
+                        html += `</div>`;
+                    }
+                    
+                    // 可展开查看完整信息
+                    if (exp.context || exp.consequence || exp.key_dialogue) {
+                        const detailId = `detail-${charName}-${exp.chapter_number}-${experiences.indexOf(exp)}`;
+                        html += `<div style="margin-top: 6px;">`;
+                        html += `<a href="#" onclick="toggleDetail('${detailId}'); return false;" style="font-size: 11px; color: #2196F3;">查看详情 ▼</a>`;
+                        html += `</div>`;
+                        html += `<div id="${detailId}" style="display: none; margin-top: 8px; padding: 8px; background: rgba(0,0,0,0.05); border-radius: 4px; font-size: 12px;">`;
+                        if (exp.context) {
+                            html += `<div style="margin-bottom: 6px;"><strong>🔍 背景：</strong>${exp.context}</div>`;
+                        }
+                        if (exp.consequence) {
+                            html += `<div style="margin-bottom: 6px;"><strong>⚡ 后果：</strong>${exp.consequence}</div>`;
+                        }
+                        if (exp.key_dialogue) {
+                            html += `<div><strong>💬 关键对话：</strong>"${exp.key_dialogue}"</div>`;
+                        }
+                        html += `</div>`;
+                    }
+                    
+                    html += `</div>`;
+                });
+                html += `</div></div>`;
+            }
+            
+            // 2. 关系变化
+            const relationships = tracker.relationships[charName] || [];
+            const changedRels = relationships.filter(rel => 
+                rel.evolution_history?.some(h => h.chapter === chapterNum)
+            );
+            
+            if (changedRels.length > 0) {
+                html += `<div class="character-section">`;
+                html += `<div class="character-section-title">🤝 关系变化 (${changedRels.length})</div>`;
+                html += `<div class="character-section-content">`;
+                changedRels.forEach(rel => {
+                    const change = rel.evolution_history.find(h => h.chapter === chapterNum);
+                    html += `<div class="relationship-item">`;
+                    html += `<div>`;
+                    html += `<span class="relationship-target">${rel.target_character}</span>`;
+                    html += ` <span style="font-size: 11px; color: #999;">${getRelTypeLabel(rel.relationship_type)}</span>`;
+                    html += `</div>`;
+                    html += `<div class="intimacy-bar"><div class="intimacy-fill" style="width: ${rel.intimacy_level}%"></div></div>`;
+                    html += `<div style="font-size: 11px; margin-top: 4px;">`;
+                    html += `亲密度: ${change.old_intimacy} → ${change.new_intimacy} `;
+                    html += `<span style="color: ${change.new_intimacy > change.old_intimacy ? '#4CAF50' : '#f44336'};">`;
+                    html += `(${change.new_intimacy - change.old_intimacy > 0 ? '+' : ''}${change.new_intimacy - change.old_intimacy})`;
+                    html += `</span>`;
+                    html += `</div>`;
+                    if (change.reason) {
+                        html += `<div style="font-size: 11px; margin-top: 4px; color: #666;">原因: ${truncate(change.reason, 60)}</div>`;
+                    }
+                    html += `</div>`;
+                });
+                html += `</div></div>`;
+            }
+            
+            // 3. 性格演变
+            const evolution = tracker.personality_evolution?.[charName]?.filter(e => e.chapter_number === chapterNum) || [];
+            if (evolution.length > 0) {
+                html += `<div class="character-section">`;
+                html += `<div class="character-section-title">🧠 性格变化 (${evolution.length})</div>`;
+                html += `<div class="character-section-content">`;
+                evolution.forEach(evo => {
+                    html += `<div class="trait-item">`;
+                    html += `<strong>${evo.trait_name}</strong>: ${evo.old_intensity} → ${evo.new_intensity} `;
+                    html += `<span style="color: ${evo.new_intensity > evo.old_intensity ? '#4CAF50' : '#f44336'};">`;
+                    html += `(${evo.new_intensity - evo.old_intensity > 0 ? '+' : ''}${evo.new_intensity - evo.old_intensity})`;
+                    html += `</span>`;
+                    html += `</div>`;
+                    if (evo.reason) {
+                        html += `<div style="font-size: 11px; color: #666; margin-top: 4px;">${truncate(evo.reason, 80)}</div>`;
+                    }
+                });
+                html += `</div></div>`;
+            }
+            
+            // 4. 当前状态总览
+            const currentTraits = tracker.personality_traits?.[charName] || [];
+            if (currentTraits.length > 0) {
+                html += `<div class="character-section">`;
+                html += `<div class="character-section-title">📊 当前性格特质</div>`;
+                html += `<div class="character-section-content">`;
+                currentTraits.forEach(trait => {
+                    html += `<span class="trait-item">${trait.trait_name} (${trait.intensity})</span>`;
+                });
+                html += `</div></div>`;
+            }
+            
+            html += `</div>`;
+            return html;
+        }
+        
+        // 切换详情显示
+        function toggleDetail(id) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.style.display = el.style.display === 'none' ? 'block' : 'none';
+            }
+        }
+        
+        // 辅助函数
+        function getEventTypeLabel(type) {
+            const labels = {
+                'achievement': '成就',
+                'conflict': '冲突',
+                'relationship': '关系',
+                'growth': '成长',
+                'trauma': '创伤'
+            };
+            return labels[type] || type;
+        }
+        
+        function getImpactLabel(impact) {
+            const labels = {
+                'positive': '正面',
+                'negative': '负面',
+                'neutral': '中性'
+            };
+            return labels[impact] || impact;
+        }
+        
+        function getRelTypeLabel(type) {
+            const labels = {
+                'friend': '朋友',
+                'enemy': '敌人',
+                'family': '家人',
+                'lover': '恋人',
+                'mentor': '师徒',
+                'rival': '对手',
+                'neutral': '普通'
+            };
+            return labels[type] || type;
+        }
+        
+        function truncate(text, maxLen) {
+            if (!text) return '';
+            if (text.length <= maxLen) return text;
+            return text.substring(0, maxLen) + '...';
+        }
+
         // 返回主界面
         function goBack() {
             window.location.href = '/';
@@ -788,6 +1221,9 @@
             }
             if (!e.target.closest('.toc-panel') && !e.target.closest('.toolbar')) {
                 document.getElementById('tocPanel').classList.remove('show');
+            }
+            if (!e.target.closest('.character-panel') && !e.target.closest('.toolbar')) {
+                document.getElementById('characterPanel').classList.remove('show');
             }
         });
 

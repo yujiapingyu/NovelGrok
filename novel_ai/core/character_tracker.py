@@ -20,6 +20,12 @@ class CharacterExperience:
     impact: str  # 'positive', 'negative', 'neutral'
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
     related_characters: List[str] = field(default_factory=list)
+    # 新增字段：提供更丰富的事件信息
+    context: str = ""  # 事件发生的背景/前因
+    emotional_state: str = ""  # 角色当时的情绪状态
+    consequence: str = ""  # 事件的后果/影响
+    location: str = ""  # 事件发生的场景/地点
+    key_dialogue: str = ""  # 关键对话或想法
     
     def to_dict(self) -> dict:
         return {
@@ -28,12 +34,30 @@ class CharacterExperience:
             'description': self.description,
             'impact': self.impact,
             'timestamp': self.timestamp,
-            'related_characters': self.related_characters
+            'related_characters': self.related_characters,
+            'context': self.context,
+            'emotional_state': self.emotional_state,
+            'consequence': self.consequence,
+            'location': self.location,
+            'key_dialogue': self.key_dialogue
         }
     
     @staticmethod
     def from_dict(data: dict) -> 'CharacterExperience':
-        return CharacterExperience(**data)
+        # 兼容旧数据格式
+        return CharacterExperience(
+            chapter_number=data.get('chapter_number', 0),
+            event_type=data.get('event_type', 'unknown'),
+            description=data.get('description', ''),
+            impact=data.get('impact', 'neutral'),
+            timestamp=data.get('timestamp', datetime.now().isoformat()),
+            related_characters=data.get('related_characters', []),
+            context=data.get('context', ''),
+            emotional_state=data.get('emotional_state', ''),
+            consequence=data.get('consequence', ''),
+            location=data.get('location', ''),
+            key_dialogue=data.get('key_dialogue', '')
+        )
 
 
 @dataclass
@@ -145,7 +169,12 @@ class CharacterTracker:
         event_type: str,
         description: str,
         impact: str = 'neutral',
-        related_characters: List[str] = None
+        related_characters: List[str] = None,
+        context: str = "",
+        emotional_state: str = "",
+        consequence: str = "",
+        location: str = "",
+        key_dialogue: str = ""
     ):
         """添加角色经历"""
         if character_name not in self.experiences:
@@ -156,7 +185,12 @@ class CharacterTracker:
             event_type=event_type,
             description=description,
             impact=impact,
-            related_characters=related_characters or []
+            related_characters=related_characters or [],
+            context=context,
+            emotional_state=emotional_state,
+            consequence=consequence,
+            location=location,
+            key_dialogue=key_dialogue
         )
         self.experiences[character_name].append(experience)
     

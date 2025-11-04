@@ -43,12 +43,12 @@ class NovelImporter:
         r'^CHAPTER\s+\d+[：:\s]*.+$',  # CHAPTER 1: Title
     ]
     
-    def __init__(self, max_file_size: int = 1024 * 1024):  # 默认1MB
+    def __init__(self, max_file_size: Optional[int] = 1024 * 1024):  # 默认1MB，None表示不限制
         """
         初始化导入器
         
         Args:
-            max_file_size: 最大文件大小（字节）
+            max_file_size: 最大文件大小（字节），None表示不限制
         """
         self.max_file_size = max_file_size
         self.chapter_patterns = [re.compile(pattern, re.MULTILINE | re.IGNORECASE) 
@@ -61,6 +61,10 @@ class NovelImporter:
         Returns:
             (是否有效, 错误信息)
         """
+        # 如果没有设置限制，直接返回有效
+        if self.max_file_size is None:
+            return True, None
+        
         size = len(content.encode('utf-8'))
         if size > self.max_file_size:
             size_mb = size / (1024 * 1024)
