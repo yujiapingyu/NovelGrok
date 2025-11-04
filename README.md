@@ -73,6 +73,142 @@ http://localhost:5001
 - ✅ 获取情节建议
 - ✅ 实时统计数据可视化
 - ✅ 美观的现代化界面
+- ✅ **📥 小说导入功能** - 支持导入现有小说并自动提取角色
+- ✅ **🤖 AI一键分析** - 自动分析小说类型、背景设定和故事大纲（新功能）
+
+### 📥 小说导入功能（新功能）
+
+**功能说明**：
+NovelGrok现在支持导入已有的小说文本，自动切分章节并提取角色信息。
+
+**支持的章节格式**：
+- `第一章：标题` / `第1章 标题`
+- `第一回：标题` / `第1回 标题`  
+- `Chapter 1: Title` / `CHAPTER 1: Title`
+- `1. 标题` / `1、标题`
+- `【第一章】标题`
+
+**使用方法**：
+
+1. **通过Web界面导入**：
+   - 点击"📥 导入小说"按钮
+   - 输入项目名称
+   - 粘贴小说文本（或从文件加载）
+   - 点击"👁️ 预览"查看切分结果
+   - 确认后点击"✅ 确认导入"
+
+2. **文件大小限制**：
+   - 最大支持1MB的文本文件
+   - 约100万字符（中文约30-40万字）
+   - 实时显示文件大小和字符数
+
+4. **自动功能**：
+   - ✅ 智能识别章节标题格式
+   - ✅ 自动切分章节内容
+   - ✅ 统计字数和章节数
+   - ✅ **AI自动提取主要角色**（可选）
+   - ✅ 分析角色描述、性格、关系
+   - ✅ **智能新角色检测**（增强功能）
+     * 先分析全文前10万字提取初始角色
+     * 逐章检测后续章节的新登场角色
+     * 确保不遗漏任何重要角色
+   - ✅ **自动分析角色经历追踪**（可选）
+     * 逐章分析角色经历和重要事件
+     * 追踪角色关系的演变
+     * 记录性格特质的变化轨迹
+   - ✅ 导入章节与生成章节可视化区分
+
+4. **导入后**：
+   - 章节显示📥导入标记
+   - 可继续使用AI生成后续章节
+   - 角色信息自动填充到角色列表
+   - 支持编辑和修改导入的内容
+
+**代码示例**：
+
+```python
+from novel_ai.utils.novel_importer import NovelImporter
+from novel_ai.api.grok_client import GrokClient
+
+# 创建导入器
+importer = NovelImporter(max_file_size=1024*1024)  # 1MB
+
+# 导入小说
+with open('my_novel.txt', 'r', encoding='utf-8') as f:
+    content = f.read()
+
+success, chapters, error = importer.import_novel(content)
+
+if success:
+    print(f"成功导入 {len(chapters)} 章")
+    
+    # 提取角色
+    client = GrokClient()
+    characters = client.extract_characters_from_novel(content)
+    print(f"提取到 {len(characters)} 个角色")
+else:
+    print(f"导入失败: {error}")
+```
+
+**技术特点**：
+- 正则表达式模式匹配，支持多种章节格式
+- 智能模式检测，自动选择最匹配的格式
+- Grok AI驱动的角色提取，准确识别主要角色
+- 后台异步处理，不阻塞界面操作
+- 完整的错误处理和用户提示
+
+### 🤖 AI一键分析功能（新功能）
+
+**功能说明**：
+在项目概览页面，点击"🤖 AI一键分析"按钮，系统会自动分析已有的章节内容，智能生成项目的类型、背景设定和故事大纲。
+
+**适用场景**：
+- 导入小说后快速生成项目信息
+- 已写作多章但未填写项目设定
+- 想要客观的AI视角总结作品
+
+**分析内容**：
+1. **小说类型** - 自动识别类型（科幻、奇幻、悬疑、都市等）
+2. **背景设定** - 总结世界观、时代、地点等关键设定
+3. **故事大纲** - 概括主要情节、主角目标、主要冲突
+
+**使用方法**：
+```
+1. 打开项目 → 切换到"📊 概览"标签
+2. 点击"🤖 AI一键分析"按钮
+3. 确认分析（会覆盖现有的项目信息）
+4. 等待AI处理（通常20-60秒）
+5. 查看自动生成的类型、背景和大纲
+```
+
+**代码示例**：
+```python
+from novel_ai.api.grok_client import GrokClient
+from novel_ai.core.project import NovelProject
+
+# 加载项目
+project = NovelProject.load("我的小说")
+
+# AI分析
+client = GrokClient()
+analysis = client.analyze_project_info(project)
+
+print(f"类型: {analysis['genre']}")
+print(f"背景: {analysis['background']}")
+print(f"大纲: {analysis['plot_outline']}")
+
+# 更新项目
+project.genre = analysis['genre']
+project.background = analysis['background']
+project.plot_outline = analysis['plot_outline']
+project.save()
+```
+
+**注意事项**：
+- 需要项目中至少有一个章节
+- 会分析前50000字符的内容
+- 生成的内容会覆盖现有的项目类型、背景和大纲
+- 建议在导入小说后使用此功能
 ```
 
 ## 📄 许可证

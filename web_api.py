@@ -204,6 +204,67 @@ def update_project(project_title):
         }), 500
 
 
+@app.route('/api/projects/<project_title>/analyze', methods=['POST'])
+def analyze_project_with_ai(project_title):
+    """使用AI分析项目，自动生成类型、背景和大纲"""
+    try:
+        project = NovelProject.load(project_title)
+        
+        if not project.chapters or len(project.chapters) == 0:
+            print(f"[AI分析] 错误: 项目 '{project_title}' 中没有章节")
+            print(f"[AI分析] 章节列表: {project.chapters}")
+            return jsonify({
+                'success': False,
+                'error': f'项目中没有章节，无法分析。当前章节数: {len(project.chapters) if project.chapters else 0}'
+            }), 400
+        
+        print(f"[AI分析] 开始分析项目 '{project_title}'")
+        print(f"[AI分析] 章节数: {len(project.chapters)}")
+        
+        client = GrokClient()
+        
+        import time
+        start_time = time.time()
+        
+        # 调用AI分析
+        analysis = client.analyze_project_info(project)
+        
+        # 更新项目信息
+        project.genre = analysis.get('genre', '')
+        project.background = analysis.get('background', '')
+        project.plot_outline = analysis.get('plot_outline', '')
+        
+        project.save()
+        
+        elapsed = time.time() - start_time
+        print(f"[AI分析] 分析完成，耗时 {elapsed:.1f} 秒")
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'genre': analysis.get('genre', ''),
+                'background': analysis.get('background', ''),
+                'plot_outline': analysis.get('plot_outline', ''),
+                'message': 'AI分析完成',
+                'elapsed_time': f'{elapsed:.1f}秒'
+            }
+        })
+        
+    except FileNotFoundError:
+        return jsonify({
+            'success': False,
+            'error': f'项目不存在: {project_title}'
+        }), 404
+    except Exception as e:
+        print(f"[AI分析] 错误: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.route('/api/projects/<project_title>', methods=['DELETE'])
 def delete_project(project_title):
     """删除项目"""
@@ -1316,6 +1377,198 @@ def append_outlines(project_title):
         print(f"[追加大纲] 错误: {str(e)}")
         import traceback
         traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+# === 小说导入 ===
+
+@app.route('/api/projects/<project_title>/import-novel', methods=['POST'])
+def import_novel(project_title):
+    """导入小说文本"""
+    try:
+        data = request.json
+        novel_content = data.get('content', '')
+        extract_characters = data.get('extract_characters', True)
+        
+        if not novel_content or not novel_content.strip():
+            return jsonify({
+                'success': False,
+                'error': '小说内容不能为空'
+            }), 400
+        
+        print(f"[导入小说] 开始导入小说到项目 '{project_title}'")
+        print(f"[导入小说] 内容长度: {len(novel_content)} 字符")
+        
+        # 使用导入器处理小说
+        from novel_ai.utils.novel_importer import NovelImporter
+        importer = NovelImporter(max_file_size=1024 * 1024)  # 1MB
+        
+        success, chapters, error = importer.import_novel(novel_content)
+        
+        if not success:
+            return jsonify({
+                'success': False,
+                'error': error
+            }), 400
+        
+        print(f"[导入小说] 成功切分 {len(chapters)} 个章节")
+        
+        # 加载或创建项目
+        try:
+            project = NovelProject.load(project_title)
+            print(f"[导入小说] 加载现有项目")
+        except FileNotFoundError:
+            project = NovelProject(project_title)
+            print(f"[导入小说] 创建新项目")
+        
+        # 将章节添加到项目
+        from novel_ai.core.project import Chapter
+        for imported_ch in chapters:
+            chapter = Chapter(
+                title=imported_ch.title,
+                content=imported_ch.content,
+                chapter_number=imported_ch.chapter_number,
+                word_count=imported_ch.word_count,
+                source="imported"  # 标记为导入章节
+            )
+            # 直接添加到章节列表，保持章节号
+            project.chapters.append(chapter)
+        
+        # 提取角色和角色追踪（可选，在后台线程中执行）
+        characters_extracted = []
+        if extract_characters:
+            print(f"[导入小说] 开始提取角色和分析角色追踪...")
+            
+            def extract_chars_and_tracking_async():
+                try:
+                    client = GrokClient()
+                    
+                    # 1. 提取角色
+                    print(f"[导入小说] 步骤1: 提取角色信息...")
+                    chars = client.extract_characters_from_novel(novel_content)
+                    
+                    # 将提取的角色添加到项目
+                    from novel_ai.core.project import Character
+                    for char_data in chars:
+                        character = Character(
+                            name=char_data['name'],
+                            description=char_data['description'],
+                            personality=char_data['personality']
+                        )
+                        # 解析relationships字符串为字典（简单处理）
+                        if char_data.get('relationships'):
+                            # 暂时将关系存为一个通用描述
+                            character.relationships = {'其他': char_data['relationships']}
+                        
+                        project.add_character(character)
+                    
+                    project.save()
+                    print(f"[导入小说] ✓ 成功提取并保存 {len(chars)} 个角色")
+                    
+                    # 2. 分析每个章节：检测新角色 + 角色追踪
+                    print(f"[导入小说] 步骤2: 逐章分析新角色和角色追踪...")
+                    for idx, chapter in enumerate(project.chapters):
+                        if chapter.source == 'imported':
+                            try:
+                                print(f"[导入小说]   分析第{chapter.chapter_number}章: {chapter.title}...")
+                                
+                                # 2.1 检测新角色
+                                existing_char_names = [char.name for char in project.characters]
+                                new_chars = client.analyze_new_characters(chapter, existing_char_names)
+                                
+                                if new_chars:
+                                    print(f"[导入小说]     发现 {len(new_chars)} 个新角色: {[c['name'] for c in new_chars]}")
+                                    from novel_ai.core.project import Character
+                                    for char_data in new_chars:
+                                        character = Character(
+                                            name=char_data['name'],
+                                            description=char_data['description'],
+                                            personality=char_data.get('personality', '')
+                                        )
+                                        project.add_character(character)
+                                    project.save()
+                                
+                                # 2.2 更新角色追踪
+                                client.auto_update_character_tracker(project, chapter)
+                                project.save()
+                                
+                            except Exception as e:
+                                print(f"[导入小说]   ⚠️ 第{chapter.chapter_number}章分析失败: {e}")
+                    
+                    print(f"[导入小说] ✓ 新角色检测和角色追踪分析完成！")
+                    print(f"[导入小说] 最终角色数: {len(project.characters)}")
+                    
+                except Exception as e:
+                    print(f"[导入小说] 角色提取/追踪失败: {e}")
+                    import traceback
+                    traceback.print_exc()
+            
+            # 启动后台线程
+            import threading
+            thread = threading.Thread(target=extract_chars_and_tracking_async)
+            thread.daemon = True
+            thread.start()
+        
+        # 保存项目
+        project.save()
+        
+        # 获取导入摘要
+        summary = importer.get_import_summary(chapters)
+        
+        print(f"[导入小说] 导入完成！{summary['chapter_count']}章，共{summary['total_words']}字")
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'message': f'成功导入小说，共{len(chapters)}章',
+                'summary': summary,
+                'chapters': [
+                    {
+                        'chapter_number': ch.chapter_number,
+                        'title': ch.title,
+                        'word_count': ch.word_count
+                    }
+                    for ch in chapters[:20]  # 只返回前20章的信息
+                ],
+                'character_extraction_started': extract_characters
+            }
+        })
+        
+    except Exception as e:
+        print(f"[导入小说] 错误: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/projects/<project_title>/import-status', methods=['GET'])
+def get_import_status(project_title):
+    """获取导入状态（主要是角色提取进度）"""
+    try:
+        project = NovelProject.load(project_title)
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'chapter_count': len(project.chapters),
+                'character_count': len(project.characters),
+                'total_words': project.get_total_word_count(),
+                'characters': [
+                    {
+                        'name': char.name,
+                        'description': char.description[:50] + '...' if len(char.description) > 50 else char.description
+                    }
+                    for char in project.characters
+                ]
+            }
+        })
+    except Exception as e:
         return jsonify({
             'success': False,
             'error': str(e)

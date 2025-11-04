@@ -82,6 +82,7 @@ class Chapter:
     chapter_number: int = 0
     summary: str = ""
     word_count: int = 0
+    source: str = "generated"  # 'generated' or 'imported'
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     updated_at: str = field(default_factory=lambda: datetime.now().isoformat())
     

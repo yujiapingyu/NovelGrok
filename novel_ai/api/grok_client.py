@@ -1473,5 +1473,262 @@ class GrokClient:
         except Exception as e:
             print(f"追加大纲时出错: {e}")
             raise
+    
+    def extract_characters_from_novel(
+        self,
+        novel_content: str,
+        max_content_length: int = 100000  # 约100KB的中文文本
+    ) -> List[Dict[str, str]]:
+        """
+        从导入的小说中提取主要角色
+        
+        Args:
+            novel_content: 小说全文内容
+            max_content_length: 最大分析内容长度（避免超过上下文限制）
+        
+        Returns:
+            角色列表，每个包含: name, description, personality, relationships
+        """
+        # 如果小说太长，只分析前半部分（通常前半部分会介绍主要角色）
+        if len(novel_content) > max_content_length:
+            novel_content = novel_content[:max_content_length]
+            analysis_note = f"（分析前{max_content_length}字）"
+        else:
+            analysis_note = ""
+        
+        system_prompt = "你是一位资深的小说分析专家，擅长从小说中提取和总结角色信息。"
+        
+        user_prompt = f"""请分析以下小说内容{analysis_note}，提取所有**重要角色**的信息。
+
+【小说内容】：
+{novel_content}
+
+【提取要求】：
+1. 只提取**主要角色和重要配角**（不要提取路人甲乙等次要角色）
+2. 对于每个角色，提取：
+   - name: 角色名字
+   - description: 角色的外貌、身份、职业、特点（50-120字）
+   - personality: 性格特点（30-80字）
+   - relationships: 与其他角色的关系（如果有）
+
+3. 按角色重要性排序（主角最前面）
+
+4. 尽量完整准确，基于小说中的实际描写
+
+【输出格式】（必须是有效的JSON）：
+```json
+[
+  {{
+    "name": "角色名字",
+    "description": "角色的外貌、身份、职业、特点等详细描述",
+    "personality": "性格特点",
+    "relationships": "与其他角色的关系（可选）"
+  }}
+]
+```
+
+⚠️ 注意：
+- 只返回JSON数组，不要其他内容
+- 至少提取5个主要角色（如果有的话）
+- 如果角色没有明显关系描述，relationships字段可以为空字符串
+"""
+        
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        
+        try:
+            response = self._make_request(messages, temperature=0.3, max_tokens=4000)
+            
+            # 提取JSON
+            import re
+            import json
+            
+            # 首先尝试提取 ```json ... ``` 代码块
+            json_match = re.search(r'```json\s*(.*?)\s*```', response, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(1).strip()
+            else:
+                # 尝试提取 ``` ... ``` 代码块
+                json_match = re.search(r'```\s*(.*?)\s*```', response, re.DOTALL)
+                if json_match:
+                    json_str = json_match.group(1).strip()
+                else:
+                    # 直接使用响应内容
+                    json_str = response.strip()
+            
+            # 移除可能的多余文本（只保留JSON数组部分）
+            start_idx = json_str.find('[')
+            end_idx = json_str.rfind(']')
+            
+            if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                json_str = json_str[start_idx:end_idx + 1]
+            
+            # 解析JSON
+            characters = json.loads(json_str)
+            
+            # 确保返回的是列表
+            if not isinstance(characters, list):
+                print(f"⚠️ 返回的不是列表: {type(characters)}")
+                return []
+            
+            # 验证每个角色的数据结构
+            validated_characters = []
+            for char in characters:
+                if isinstance(char, dict) and char.get("name"):
+                    # 确保所有字段都存在
+                    validated_char = {
+                        "name": char.get("name", ""),
+                        "description": char.get("description", ""),
+                        "personality": char.get("personality", ""),
+                        "relationships": char.get("relationships", "")
+                    }
+                    validated_characters.append(validated_char)
+            
+            print(f"✓ 成功提取{len(validated_characters)}个角色")
+            return validated_characters
+            
+        except json.JSONDecodeError as e:
+            print(f"⚠️ 角色提取失败 (JSON解析错误): {e}")
+            print(f"   响应内容: {response[:300]}...")
+            return []
+        except Exception as e:
+            print(f"⚠️ 角色提取失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+    
+    def analyze_project_info(
+        self,
+        project: NovelProject
+    ) -> Dict[str, str]:
+        """
+        使用AI分析项目，自动生成类型、背景和大纲
+        
+        Args:
+            project: 小说项目
+        
+        Returns:
+            包含 genre, background, plot_outline 的字典
+        """
+        if not project.chapters or len(project.chapters) == 0:
+            raise Exception("项目中没有章节，无法分析")
+        
+        # 收集所有章节内容（限制长度）
+        all_content = ""
+        max_length = 50000  # 约50KB，足够分析
+        
+        for chapter in project.chapters:
+            if len(all_content) >= max_length:
+                break
+            remaining = max_length - len(all_content)
+            all_content += f"\n\n【第{chapter.chapter_number}章：{chapter.title}】\n{chapter.content[:remaining]}"
+        
+        if len(all_content) < 500:
+            raise Exception("内容太短，无法进行有效分析")
+        
+        print(f"📊 开始AI分析项目...")
+        print(f"   分析内容长度: {len(all_content)} 字符")
+        print(f"   章节数: {len(project.chapters)}")
+        
+        system_prompt = "你是一位资深的小说编辑和文学评论家，擅长分析小说的类型、背景设定和故事大纲。"
+        
+        user_prompt = f"""请分析以下小说内容，提供专业的分类和总结。
+
+【小说标题】：{project.title}
+
+【小说内容】：
+{all_content}
+
+【分析要求】：
+请基于实际内容，提供以下信息：
+
+1. **类型（genre）**：
+   - 识别小说的主要类型（如：科幻、奇幻、悬疑、都市、言情、武侠等）
+   - 可以是混合类型（例如："科幻悬疑"）
+   - 20字以内
+
+2. **背景设定（background）**：
+   - 概括故事发生的世界观、时代背景、地点
+   - 包括关键的世界设定元素
+   - 100-200字
+
+3. **故事大纲（plot_outline）**：
+   - 概括主要情节线索
+   - 包括主角目标、主要冲突、故事发展方向
+   - 不要透露结局（如果是进行中的故事）
+   - 200-400字
+
+【输出格式】（必须是有效的JSON）：
+```json
+{{
+  "genre": "小说类型",
+  "background": "背景设定描述",
+  "plot_outline": "故事大纲"
+}}
+```
+
+⚠️ 注意：
+- 只返回JSON对象，不要其他内容
+- 基于实际内容分析，不要编造
+- 使用准确、专业的描述
+"""
+        
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        
+        try:
+            response = self._make_request(messages, temperature=0.5, max_tokens=2000)
+            
+            # 提取JSON
+            import re
+            import json
+            
+            # 尝试提取JSON代码块
+            json_match = re.search(r'```json\s*(.*?)\s*```', response, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(1).strip()
+            else:
+                json_match = re.search(r'```\s*(.*?)\s*```', response, re.DOTALL)
+                if json_match:
+                    json_str = json_match.group(1).strip()
+                else:
+                    json_str = response.strip()
+            
+            # 查找JSON对象
+            start_idx = json_str.find('{')
+            end_idx = json_str.rfind('}')
+            
+            if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                json_str = json_str[start_idx:end_idx + 1]
+            
+            # 解析JSON
+            result = json.loads(json_str)
+            
+            # 验证必需字段
+            required_fields = ['genre', 'background', 'plot_outline']
+            for field in required_fields:
+                if field not in result:
+                    result[field] = ""
+            
+            print(f"✅ AI分析完成")
+            print(f"   类型: {result['genre']}")
+            print(f"   背景: {result['background'][:50]}...")
+            print(f"   大纲: {result['plot_outline'][:50]}...")
+            
+            return result
+            
+        except json.JSONDecodeError as e:
+            print(f"⚠️ 分析失败 (JSON解析错误): {e}")
+            print(f"   响应内容: {response[:500]}...")
+            raise Exception("AI返回的分析结果格式错误，请重试")
+        except Exception as e:
+            print(f"⚠️ 分析失败: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
 
 

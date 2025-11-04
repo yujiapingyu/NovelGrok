@@ -1246,8 +1246,11 @@
 
         <div class="main-content">
             <div class="sidebar">
-                <button class="btn" style="width: 100%;" onclick="showCreateProjectModal()">
+                <button class="btn" style="width: 100%; margin-bottom: 10px;" onclick="showCreateProjectModal()">
                     ➕ 创建新项目
+                </button>
+                <button class="btn btn-secondary" style="width: 100%;" onclick="showImportNovelModal()">
+                    📥 导入小说
                 </button>
                 
                 <div class="project-list" id="projectList">
@@ -1283,8 +1286,13 @@
                         <div class="card">
                             <h3>项目信息</h3>
                             <div id="projectInfo"></div>
-                            <button class="btn" onclick="showEditProjectModal()" style="margin-top: 15px;">编辑项目</button>
-                            <button class="btn btn-danger" onclick="deleteProject()" style="margin-top: 15px; margin-left: 10px;">删除项目</button>
+                            <div style="margin-top: 15px;">
+                                <button class="btn" onclick="showEditProjectModal()">编辑项目</button>
+                                <button class="btn btn-danger" onclick="deleteProject()" style="margin-left: 10px;">删除项目</button>
+                                <button class="btn" onclick="analyzeProjectWithAI()" style="margin-left: 10px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                                    🤖 AI一键分析
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -1462,6 +1470,50 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeModal('createProjectModal')">取消</button>
                 <button class="btn" onclick="createProject()">创建</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 导入小说模态框 -->
+    <div id="importNovelModal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h2>📥 导入小说</h2>
+            </div>
+            <div class="form-group">
+                <label>项目名称 *</label>
+                <input type="text" id="importProjectTitle" required placeholder="为导入的小说创建项目名称">
+                <small style="color: #666; display: block; margin-top: 5px;">如果项目已存在，章节将追加到该项目</small>
+            </div>
+            <div class="form-group">
+                <label>小说文本 *（最大1MB）</label>
+                <textarea id="importNovelContent" style="min-height: 300px; font-family: monospace;" 
+                          placeholder="粘贴小说文本内容...&#10;&#10;支持的章节标题格式：&#10;- 第一章：标题&#10;- 第1章 标题&#10;- Chapter 1: Title&#10;- 1. 标题&#10;等常见格式"></textarea>
+                <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center;">
+                    <small id="importContentSize" style="color: #666;">0 字符 (0 KB)</small>
+                    <label style="cursor: pointer;">
+                        <input type="file" id="importFileInput" accept=".txt" style="display: none;" onchange="handleFileSelect(event)">
+                        <span class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.9em; display: inline-block;">📂 从文件加载</span>
+                    </label>
+                </div>
+            </div>
+            <div class="form-group">
+                <label style="display: flex; align-items: center; cursor: pointer;">
+                    <input type="checkbox" id="importExtractCharacters" checked style="margin-right: 8px; cursor: pointer;">
+                    <span>
+                        <strong>自动提取角色信息并分析角色追踪</strong>（使用AI分析）<br>
+                        <small style="color: #666; margin-left: 24px;">包括：角色信息、角色经历、关系变化、性格发展（需要较长时间）</small>
+                    </span>
+                </label>
+            </div>
+            <div id="importPreview" style="display: none; margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                <h4 style="margin-bottom: 10px;">📋 导入预览</h4>
+                <div id="importPreviewContent"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('importNovelModal')">取消</button>
+                <button class="btn" onclick="previewImport()" id="previewImportBtn">👁️ 预览</button>
+                <button class="btn" onclick="confirmImport()" id="confirmImportBtn" style="display: none;">✅ 确认导入</button>
             </div>
         </div>
     </div>

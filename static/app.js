@@ -507,6 +507,258 @@ async function deleteProject() {
     }
 }
 
+async function analyzeProjectWithAI() {
+    if (!currentProject) return;
+    
+    // 检查是否有章节 - 使用多种方式判断
+    const hasChapters = currentProject.chapters && currentProject.chapters.length > 0;
+    const chapterCount = currentProject.chapter_count || (currentProject.chapters ? currentProject.chapters.length : 0);
+    
+    if (!hasChapters && chapterCount === 0) {
+        alert('项目中没有章节，无法进行AI分析。\n请先添加章节或导入小说。');
+        return;
+    }
+    
+    if (!confirm('AI将分析当前小说的所有章节内容，自动生成：\n• 小说类型\n• 背景设定\n• 故事大纲\n\n这将覆盖现有的项目信息，是否继续？')) {
+        return;
+    }
+    
+    // 显示进度提示
+    const progressModal = createProgressModal('AI分析项目', 0, '正在分析小说内容，生成类型、背景和大纲...');
+    
+    try {
+        const response = await apiCall(`/api/projects/${encodeURIComponent(currentProject.title)}/analyze`, {
+            method: 'POST'
+        });
+        
+        closeProgressModal();
+        
+        // 显示分析结果
+        const data = response.data;
+        const resultMessage = `✅ AI分析完成！\n\n` +
+            `📚 类型：${data.genre}\n\n` +
+            `🌍 背景：${data.background}\n\n` +
+            `📖 大纲：${data.plot_outline.substring(0, 100)}...\n\n` +
+            `⏱️ 用时：${data.elapsed_time}`;
+        
+        alert(resultMessage);
+        
+        // 重新加载项目信息
+        await selectProject(currentProject.title);
+        
+    } catch (error) {
+        closeProgressModal();
+        alert('AI分析失败: ' + error.message);
+    }
+}
+
+// ========== 小说导入 ==========
+
+function showImportNovelModal() {
+    // 清空输入
+    document.getElementById('importProjectTitle').value = '';
+    document.getElementById('importNovelContent').value = '';
+    document.getElementById('importExtractCharacters').checked = true;
+    document.getElementById('importPreview').style.display = 'none';
+    document.getElementById('previewImportBtn').style.display = 'inline-block';
+    document.getElementById('confirmImportBtn').style.display = 'none';
+    updateImportContentSize();
+    
+    showModal('importNovelModal');
+}
+
+function updateImportContentSize() {
+    const content = document.getElementById('importNovelContent').value;
+    const sizeElement = document.getElementById('importContentSize');
+    
+    const charCount = content.length;
+    const byteSize = new Blob([content]).size;
+    const kbSize = (byteSize / 1024).toFixed(2);
+    const mbSize = (byteSize / (1024 * 1024)).toFixed(2);
+    
+    let sizeText = `${charCount} 字符 (${kbSize} KB)`;
+    let colorStyle = '';
+    
+    if (byteSize > 1024 * 1024) {
+        sizeText = `${charCount} 字符 (${mbSize} MB) - ⚠️ 超过1MB限制`;
+        colorStyle = 'color: #dc3545;';
+    } else if (byteSize > 900 * 1024) {
+        colorStyle = 'color: #ff9800;';
+    }
+    
+    sizeElement.innerHTML = sizeText;
+    sizeElement.style = colorStyle;
+}
+
+function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        document.getElementById('importNovelContent').value = e.target.result;
+        updateImportContentSize();
+    };
+    reader.readAsText(file, 'UTF-8');
+}
+
+async function previewImport() {
+    const projectTitle = document.getElementById('importProjectTitle').value.trim();
+    const content = document.getElementById('importNovelContent').value.trim();
+    
+    if (!projectTitle) {
+        alert('请输入项目名称');
+        return;
+    }
+    
+    if (!content) {
+        alert('请输入小说内容');
+        return;
+    }
+    
+    // 检查大小
+    const byteSize = new Blob([content]).size;
+    if (byteSize > 1024 * 1024) {
+        alert('小说内容超过1MB限制，请精简内容后再试');
+        return;
+    }
+    
+    // 显示加载状态
+    const previewBtn = document.getElementById('previewImportBtn');
+    const originalText = previewBtn.textContent;
+    previewBtn.disabled = true;
+    previewBtn.textContent = '分析中...';
+    
+    try {
+        // 调用API预览（实际上我们在前端简单分析）
+        const lines = content.split('\n');
+        const chapterPattern = /^(第[0-9零一二三四五六七八九十百千万]+[章回]|Chapter\s+\d+|[0-9]+[、\.])/i;
+        
+        let chapterCount = 0;
+        const chapters = [];
+        
+        for (let line of lines) {
+            const trimmed = line.trim();
+            if (trimmed && chapterPattern.test(trimmed)) {
+                chapterCount++;
+                if (chapters.length < 10) {
+                    chapters.push(trimmed);
+                }
+            }
+        }
+        
+        // 显示预览
+        const previewDiv = document.getElementById('importPreview');
+        const previewContent = document.getElementById('importPreviewContent');
+        
+        const wordCount = content.length;
+        const avgChapterWords = chapterCount > 0 ? Math.floor(wordCount / chapterCount) : 0;
+        
+        let previewHtml = `
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 15px;">
+                <div style="background: white; padding: 10px; border-radius: 6px; text-align: center;">
+                    <div style="font-size: 1.8em; color: #667eea; font-weight: bold;">${chapterCount}</div>
+                    <div style="font-size: 0.9em; color: #666;">检测到章节</div>
+                </div>
+                <div style="background: white; padding: 10px; border-radius: 6px; text-align: center;">
+                    <div style="font-size: 1.8em; color: #667eea; font-weight: bold;">${formatWordCount(wordCount)}</div>
+                    <div style="font-size: 0.9em; color: #666;">总字数</div>
+                </div>
+                <div style="background: white; padding: 10px; border-radius: 6px; text-align: center;">
+                    <div style="font-size: 1.8em; color: #667eea; font-weight: bold;">${formatWordCount(avgChapterWords)}</div>
+                    <div style="font-size: 0.9em; color: #666;">平均每章</div>
+                </div>
+            </div>
+        `;
+        
+        if (chapterCount === 0) {
+            previewHtml += `
+                <div style="background: #fff3cd; padding: 10px; border-radius: 6px; margin-bottom: 10px; border-left: 4px solid #ffc107;">
+                    ⚠️ 未检测到章节标题，将作为单章导入
+                </div>
+            `;
+        } else if (chapters.length > 0) {
+            previewHtml += `
+                <div style="margin-top: 10px;">
+                    <strong>前${Math.min(chapters.length, 10)}章标题：</strong>
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                        ${chapters.map(ch => `<li>${ch}</li>`).join('')}
+                    </ul>
+                    ${chapterCount > 10 ? `<div style="color: #666; font-size: 0.9em;">...还有 ${chapterCount - 10} 章</div>` : ''}
+                </div>
+            `;
+        }
+        
+        previewContent.innerHTML = previewHtml;
+        previewDiv.style.display = 'block';
+        
+        // 显示确认导入按钮
+        document.getElementById('previewImportBtn').style.display = 'none';
+        document.getElementById('confirmImportBtn').style.display = 'inline-block';
+        
+    } catch (error) {
+        alert('预览失败: ' + error.message);
+    } finally {
+        previewBtn.disabled = false;
+        previewBtn.textContent = originalText;
+    }
+}
+
+async function confirmImport() {
+    const projectTitle = document.getElementById('importProjectTitle').value.trim();
+    const content = document.getElementById('importNovelContent').value.trim();
+    const extractCharacters = document.getElementById('importExtractCharacters').checked;
+    
+    const confirmBtn = document.getElementById('confirmImportBtn');
+    const originalText = confirmBtn.textContent;
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = '导入中...';
+    
+    try {
+        const response = await apiCall(`/api/projects/${encodeURIComponent(projectTitle)}/import-novel`, {
+            method: 'POST',
+            body: JSON.stringify({
+                content: content,
+                extract_characters: extractCharacters
+            })
+        });
+        
+        closeModal('importNovelModal');
+        
+        const summary = response.data.summary;
+        let message = `成功导入 ${summary.chapter_count} 章，共 ${formatWordCount(summary.total_words)}`;
+        
+        if (extractCharacters) {
+            message += '\n\n🔄 AI正在后台分析：\n';
+            message += '  • 提取角色信息\n';
+            message += '  • 分析角色经历\n';
+            message += '  • 追踪关系变化\n';
+            message += '  • 记录性格发展\n\n';
+            message += '完成后可在"角色"和"角色追踪"标签页查看详细信息。';
+        }
+        
+        showAlert(message);
+        
+        // 重新加载项目列表并选中导入的项目
+        await loadProjects();
+        await selectProject(projectTitle);
+        
+    } catch (error) {
+        alert('导入失败: ' + error.message);
+    } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = originalText;
+    }
+}
+
+// 监听内容变化，更新大小显示
+document.addEventListener('DOMContentLoaded', () => {
+    const contentArea = document.getElementById('importNovelContent');
+    if (contentArea) {
+        contentArea.addEventListener('input', updateImportContentSize);
+    }
+});
+
 // ========== 标签页切换 ==========
 
 function switchTab(tabName, event) {
@@ -812,7 +1064,13 @@ function updateChaptersTab() {
         return;
     }
     
-    chapterList.innerHTML = chapters.map(chapter => `
+    chapterList.innerHTML = chapters.map(chapter => {
+        const isImported = chapter.source === 'imported';
+        const sourceBadge = isImported 
+            ? '<span style="background: #28a745; color: white; padding: 3px 8px; border-radius: 4px; font-size: 0.85em; margin-left: 8px;">📥 导入</span>'
+            : '<span style="background: #667eea; color: white; padding: 3px 8px; border-radius: 4px; font-size: 0.85em; margin-left: 8px;">🤖 生成</span>';
+        
+        return `
         <div class="card chapter-card" data-chapter="${chapter.chapter_number}">
             <div class="card-actions">
                 <button class="icon-btn" onclick="openReader(${chapter.chapter_number})" title="阅读模式">📖</button>
@@ -820,14 +1078,15 @@ function updateChaptersTab() {
                 <button class="icon-btn" onclick="generateChapterSummaryFor(${chapter.chapter_number})" title="生成摘要">📝</button>
                 <button class="icon-btn" onclick="analyzeChapterForTracking(${chapter.chapter_number})" title="分析角色动态">🔍</button>
             </div>
-            <h3>📖 第${chapter.chapter_number}章：${chapter.title}</h3>
+            <h3>📖 第${chapter.chapter_number}章：${chapter.title}${sourceBadge}</h3>
             <p><strong>字数：</strong>${chapter.word_count}字 | <strong>创建时间：</strong>${formatDate(chapter.created_at)}</p>
             ${chapter.summary ? `<p><strong>摘要：</strong>${chapter.summary}</p>` : ''}
             <div class="chapter-content" style="max-height: 150px; margin-top: 10px;">
                 ${chapter.content}
             </div>
         </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 function showAddChapterModal() {
