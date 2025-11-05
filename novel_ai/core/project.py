@@ -164,6 +164,9 @@ class NovelProject:
         # 角色动态追踪系统
         self.character_tracker = CharacterTracker()
         
+        # 短篇小说模式数据
+        self.short_story_data = {}
+        
         self.created_at = datetime.now().isoformat()
         self.updated_at = datetime.now().isoformat()
         
@@ -406,7 +409,7 @@ class NovelProject:
     
     def to_dict(self) -> dict:
         """转换为字典"""
-        return {
+        result = {
             "title": self.title,
             "genre": self.genre,
             "background": self.background,
@@ -422,6 +425,12 @@ class NovelProject:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
+        
+        # 添加短篇小说数据（如果存在）
+        if hasattr(self, 'short_story_data'):
+            result['short_story_data'] = self.short_story_data
+        
+        return result
     
     def save(self) -> str:
         """保存项目到JSON文件"""
@@ -460,6 +469,10 @@ class NovelProject:
         # 加载角色追踪数据
         if "character_tracker" in data:
             project.character_tracker = CharacterTracker.from_dict(data["character_tracker"])
+        
+        # 加载短篇小说数据
+        if "short_story_data" in data:
+            project.short_story_data = data["short_story_data"]
         
         project.created_at = data.get("created_at", project.created_at)
         project.updated_at = data.get("updated_at", project.updated_at)

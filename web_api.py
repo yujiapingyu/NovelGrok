@@ -128,12 +128,14 @@ def get_config():
     """获取前端功能配置"""
     enable_outline = os.getenv('ENABLE_OUTLINE_MODE', 'True').lower() in ('true', '1', 'yes')
     enable_import = os.getenv('ENABLE_IMPORT_NOVEL', 'True').lower() in ('true', '1', 'yes')
+    enable_short_story = os.getenv('ENABLE_SHORT_STORY_MODE', 'True').lower() in ('true', '1', 'yes')
     
     return jsonify({
         'success': True,
         'config': {
             'enable_outline_mode': enable_outline,
-            'enable_import_novel': enable_import
+            'enable_import_novel': enable_import,
+            'enable_short_story_mode': enable_short_story
         }
     })
 
@@ -1519,6 +1521,236 @@ def generate_from_outline(project_title, chapter_number):
         }), 500
 
 
+@app.route('/api/projects/<project_title>/batch-generate-from-outline', methods=['POST'])
+def batch_generate_from_outline(project_title):
+    """批量根据大纲生成章节（一键顺序生成）"""
+    try:
+        data = request.json
+        start_chapter = data.get('start_chapter', 1)
+        end_chapter = data.get('end_chapter')
+        
+        project = NovelProject.load(project_title)
+        
+        # 获取所有大纲
+        all_outlines = sorted(project.chapter_outlines, key=lambda x: x.chapter_number)
+        
+        if not all_outlines:
+            return jsonify({
+                'success': False,
+                'error': '没有可用的章节大纲'
+            }), 400
+        
+        # 如果没有指定结束章节，则生成所有大纲章节
+        if end_chapter is None:
+            end_chapter = max(o.chapter_number for o in all_outlines)
+        
+        # 筛选需要生成的大纲（只生成尚未生成的）
+        outlines_to_generate = [
+            o for o in all_outlines 
+            if start_chapter <= o.chapter_number <= end_chapter
+            and not project.get_chapter(o.chapter_number)  # 只生成不存在的章节
+        ]
+        
+        if not outlines_to_generate:
+            return jsonify({
+                'success': False,
+                'error': f'第{start_chapter}-{end_chapter}章已经全部生成，无需重复生成'
+            }), 400
+        
+        total_count = len(outlines_to_generate)
+        print(f"[批量生成] 开始批量生成 {total_count} 个章节（第{start_chapter}-{end_chapter}章）")
+        
+        # 初始化批量生成状态
+        batch_status_key = f"{project_title}_batch"
+        generation_status[batch_status_key] = {
+            'status': 'generating',
+            'total': total_count,
+            'completed': 0,
+            'current_chapter': outlines_to_generate[0].chapter_number,
+            'current_title': outlines_to_generate[0].title,
+            'failed': [],
+            'message': f'开始批量生成第{start_chapter}-{end_chapter}章...'
+        }
+        
+        # 启动后台批量生成任务
+        import threading
+        thread = threading.Thread(
+            target=batch_generate_background,
+            args=(project_title, outlines_to_generate, batch_status_key)
+        )
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'message': f'开始批量生成 {total_count} 个章节',
+                'total': total_count,
+                'chapters': [o.chapter_number for o in outlines_to_generate]
+            }
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/projects/<project_title>/batch-generate-progress', methods=['GET'])
+def batch_generate_progress(project_title):
+    """查询批量生成进度"""
+    try:
+        batch_status_key = f"{project_title}_batch"
+        status = generation_status.get(batch_status_key, {
+            'status': 'unknown',
+            'total': 0,
+            'completed': 0,
+            'message': '无批量生成任务'
+        })
+        
+        return jsonify({
+            'success': True,
+            'data': status
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/projects/<project_title>/batch-generate-cancel', methods=['POST'])
+def batch_generate_cancel(project_title):
+    """取消批量生成"""
+    try:
+        batch_status_key = f"{project_title}_batch"
+        if batch_status_key in generation_status:
+            generation_status[batch_status_key]['status'] = 'cancelled'
+            generation_status[batch_status_key]['message'] = '用户取消了批量生成'
+            print(f"[批量生成] 用户取消了批量生成任务")
+        
+        return jsonify({
+            'success': True,
+            'data': {'message': '已取消批量生成'}
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+def batch_generate_background(project_title, outlines_to_generate, batch_status_key):
+    """后台批量生成章节"""
+    try:
+        project = NovelProject.load(project_title)
+        client = GrokClient()
+        
+        total = len(outlines_to_generate)
+        completed = 0
+        
+        for i, outline in enumerate(outlines_to_generate):
+            # 检查是否被取消
+            if generation_status.get(batch_status_key, {}).get('status') == 'cancelled':
+                print(f"[批量生成] 任务已取消，停止生成")
+                break
+            
+            chapter_number = outline.chapter_number
+            
+            # 更新进度
+            generation_status[batch_status_key].update({
+                'status': 'generating',
+                'completed': completed,
+                'current_chapter': chapter_number,
+                'current_title': outline.title,
+                'message': f'正在生成第{chapter_number}章：{outline.title} ({i+1}/{total})'
+            })
+            
+            print(f"[批量生成] 生成第{chapter_number}章：{outline.title} ({i+1}/{total})")
+            
+            try:
+                # 重新加载项目以获取最新的章节内容
+                project = NovelProject.load(project_title)
+                
+                # 生成章节
+                chapter = client.generate_chapter_from_outline(project, outline)
+                
+                # 添加章节
+                project.add_chapter(chapter)
+                
+                # 检测新角色
+                try:
+                    existing_char_names = [c.name for c in project.characters]
+                    new_characters_detected = client.analyze_new_characters(chapter, existing_char_names)
+                    if new_characters_detected:
+                        print(f"🆕 第{chapter_number}章发现 {len(new_characters_detected)} 个新角色")
+                except Exception as e:
+                    print(f"⚠ 新角色检测失败: {e}")
+                
+                # 自动更新角色追踪
+                try:
+                    if len(project.characters) > 0:
+                        client.auto_update_character_tracker(project, chapter)
+                        print(f"✓ 第{chapter_number}章角色追踪已更新")
+                except Exception as e:
+                    print(f"⚠ 角色追踪更新失败: {e}")
+                
+                # 更新大纲状态
+                project.update_chapter_outline(chapter_number, status='generated')
+                
+                # 保存项目
+                project.save()
+                
+                completed += 1
+                print(f"✅ 第{chapter_number}章生成完成 ({completed}/{total})")
+                
+            except Exception as e:
+                error_msg = f"第{chapter_number}章生成失败: {str(e)}"
+                print(f"❌ {error_msg}")
+                generation_status[batch_status_key]['failed'].append({
+                    'chapter_number': chapter_number,
+                    'title': outline.title,
+                    'error': str(e)
+                })
+                # 继续生成下一章，不中断整个流程
+                continue
+        
+        # 检查是否被取消
+        if generation_status.get(batch_status_key, {}).get('status') == 'cancelled':
+            generation_status[batch_status_key].update({
+                'status': 'cancelled',
+                'completed': completed,
+                'message': f'批量生成已取消，已完成 {completed}/{total} 章'
+            })
+        else:
+            # 全部完成
+            failed_count = len(generation_status[batch_status_key].get('failed', []))
+            if failed_count > 0:
+                generation_status[batch_status_key].update({
+                    'status': 'completed_with_errors',
+                    'completed': completed,
+                    'message': f'批量生成完成，成功 {completed} 章，失败 {failed_count} 章'
+                })
+            else:
+                generation_status[batch_status_key].update({
+                    'status': 'completed',
+                    'completed': completed,
+                    'message': f'批量生成全部完成！共生成 {completed} 章'
+                })
+        
+        print(f"[批量生成] 批量生成任务结束：成功 {completed}/{total} 章")
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        generation_status[batch_status_key] = {
+            'status': 'error',
+            'message': f'批量生成失败: {str(e)}'
+        }
+
+
 # ========== 启动服务器 ==========
 
 def main():
@@ -1697,6 +1929,512 @@ def append_outlines(project_title):
             'success': False,
             'error': str(e)
         }), 500
+
+
+# === 短篇小说模式 ===
+
+@app.route('/api/projects/<project_title>/short-story-data', methods=['GET', 'POST'])
+def short_story_data(project_title):
+    """获取或保存短篇小说数据（伏笔、故事核心、大纲等）"""
+    try:
+        project = NovelProject.load(project_title)
+        
+        if request.method == 'POST':
+            # 保存数据
+            data = request.json
+            if not hasattr(project, 'short_story_data'):
+                project.short_story_data = {}
+            
+            # 更新各个字段
+            if 'foreshadowings' in data:
+                project.short_story_data['foreshadowings'] = data['foreshadowings']
+            if 'story_core' in data:
+                project.short_story_data['story_core'] = data['story_core']
+            if 'outline_data' in data:
+                project.short_story_data['outline_data'] = data['outline_data']
+            
+            project.save()
+            
+            return jsonify({
+                'success': True,
+                'data': {'message': '保存成功'}
+            })
+        else:
+            # 获取数据
+            short_story_data = getattr(project, 'short_story_data', {})
+            return jsonify({
+                'success': True,
+                'data': {
+                    'foreshadowings': short_story_data.get('foreshadowings', []),
+                    'story_core': short_story_data.get('story_core', ''),
+                    'outline_data': short_story_data.get('outline_data', None)
+                }
+            })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/projects/<project_title>/generate-story-cores', methods=['POST'])
+def generate_story_cores(project_title):
+    """AI 生成 3 个故事核心方案"""
+    try:
+        data = request.json
+        project_info = data.get('project_info', {})
+        
+        print(f"[故事核心生成] 为项目 '{project_title}' 生成故事核心方案")
+        
+        client = GrokClient()
+        
+        prompt = f"""你是一位经验丰富的小说策划师。请根据以下项目信息，生成 3 个不同风格的故事核心方案。
+
+项目信息：
+- 标题: {project_info.get('title', '未命名')}
+- 类型: {project_info.get('genre', '未指定')}
+- 背景: {project_info.get('background', '未指定')}
+- 主题: {project_info.get('theme', '未指定')}
+
+要求：
+1. 每个方案应该是完整的故事核心描述（200-300字）
+2. 包含：主角设定、核心冲突、故事主线、主题探讨
+3. 三个方案应该风格不同（如：个人成长型、社会批判型、悬疑推理型等）
+4. 描述要详细具体，有画面感和代入感
+
+请以 JSON 数组格式输出，格式如下：
+["方案1的详细描述...", "方案2的详细描述...", "方案3的详细描述..."]
+"""
+        
+        response = client._make_request([
+            {"role": "system", "content": "你是专业的小说策划师，擅长构思引人入胜的故事核心。"},
+            {"role": "user", "content": prompt}
+        ])
+        
+        # 提取 JSON
+        import json
+        import re
+        json_match = re.search(r'\[.*\]', response, re.DOTALL)
+        if not json_match:
+            raise Exception("AI 返回格式错误")
+        
+        cores = json.loads(json_match.group())
+        
+        print(f"[故事核心生成] 成功生成 {len(cores)} 个方案")
+        
+        return jsonify({
+            'success': True,
+            'data': {'cores': cores}
+        })
+        
+    except Exception as e:
+        print(f"[故事核心生成] 错误: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/projects/<project_title>/ai-suggest-params', methods=['POST'])
+def ai_suggest_params(project_title):
+    """AI 建议创作参数"""
+    try:
+        data = request.json
+        story_core = data.get('story_core', '')
+        param_type = data.get('param_type', '')  # chapter_count, chapter_length, pace
+        
+        client = GrokClient()
+        
+        if param_type == 'chapter_count':
+            prompt = f"""根据以下故事核心，建议最合适的总章节数（5-30章范围内）。
+
+故事核心：
+{story_core}
+
+请分析故事的复杂度、情节线数量、节奏需求等，给出建议。
+只返回一个JSON对象：{{"value": 章节数(整数), "reason": "建议理由(50字内)"}}"""
+            
+        elif param_type == 'chapter_length':
+            prompt = f"""根据以下故事核心，建议最合适的每章字数（1000-4000字范围内）。
+
+故事核心：
+{story_core}
+
+请分析故事的风格、节奏、描写需求等，给出建议。
+只返回一个JSON对象：{{"value": 字数(整数), "reason": "建议理由(50字内)"}}"""
+            
+        elif param_type == 'pace':
+            prompt = f"""根据以下故事核心，建议最合适的故事节奏（fast/moderate/slow）。
+
+故事核心：
+{story_core}
+
+请分析故事的类型、主题、情节特点等，给出建议。
+只返回一个JSON对象：{{"value": "节奏(fast/moderate/slow)", "reason": "建议理由(50字内)"}}"""
+        else:
+            return jsonify({'success': False, 'error': '未知的参数类型'}), 400
+        
+        response = client._make_request([
+            {"role": "system", "content": "你是专业的小说创作顾问。"},
+            {"role": "user", "content": prompt}
+        ])
+        
+        # 提取 JSON
+        import json
+        import re
+        json_match = re.search(r'\{.*\}', response, re.DOTALL)
+        if not json_match:
+            raise Exception("AI 返回格式错误")
+        
+        result = json.loads(json_match.group())
+        
+        return jsonify({
+            'success': True,
+            'data': result
+        })
+        
+    except Exception as e:
+        print(f"[AI 参数建议] 错误: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/projects/<project_title>/generate-outline-preview', methods=['POST'])
+def generate_outline_preview(project_title):
+    """生成大纲预览"""
+    try:
+        data = request.json
+        story_core = data.get('story_core', '')
+        total_chapters = data.get('total_chapters', 15)
+        chapter_length = data.get('chapter_length', 2000)
+        pace = data.get('pace', 'moderate')
+        
+        project = NovelProject.load(project_title)
+        
+        print(f"[大纲预览] 为项目 '{project_title}' 生成大纲")
+        
+        client = GrokClient()
+        
+        pace_desc = {'fast': '快节奏，情节紧凑', 'moderate': '中等节奏，平衡发展', 'slow': '慢节奏，细腻描写'}
+        
+        prompt = f"""你是一位专业的短篇小说策划师。请为以下短篇小说生成完整的章节大纲。
+
+故事核心：
+{story_core}
+
+项目信息：
+- 标题: {project.title}
+- 类型: {project.genre if project.genre else '未指定'}
+- 背景: {project.background if project.background else '未指定'}
+
+创作要求：
+- 总共 {total_chapters} 章
+- 故事节奏: {pace_desc.get(pace, '中等节奏')}
+- 每章约 {chapter_length} 字
+
+请生成详细的章节大纲，确保：
+1. 故事结构完整：开端、发展、高潮、结局
+2. 章节之间衔接自然流畅
+3. 伏笔的埋设和回收要标注清楚
+4. 每章有明确的情节推进
+
+请以 JSON 格式输出，格式如下：
+[
+  {{
+    "chapter_number": 1,
+    "title": "章节标题",
+    "summary": "详细剧情概要（150-250字）",
+    "key_events": ["关键事件1", "关键事件2", "关键事件3"],
+    "foreshadowing_planted": ["如果本章埋下伏笔"],
+    "foreshadowing_resolved": ["如果本章回收伏笔"]
+  }}
+]
+
+注意：
+- summary 要详细描述本章的完整情节
+- key_events 列出3-5个关键事件
+- foreshadowing_planted 和 foreshadowing_resolved 可以为空数组
+- 确保所有埋下的伏笔最终都有回收
+"""
+        
+        response = client._make_request([
+            {"role": "system", "content": "你是专业的短篇小说策划师，擅长设计紧凑连贯的故事结构。"},
+            {"role": "user", "content": prompt}
+        ])
+        
+        # 提取 JSON
+        import json
+        import re
+        json_match = re.search(r'\[.*\]', response, re.DOTALL)
+        if not json_match:
+            raise Exception("生成大纲格式错误")
+        
+        outline = json.loads(json_match.group())
+        
+        print(f"[大纲预览] 成功生成 {len(outline)} 章大纲")
+        
+        return jsonify({
+            'success': True,
+            'data': {'outline': outline}
+        })
+        
+    except Exception as e:
+        print(f"[大纲预览] 错误: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/projects/<project_title>/extract-foreshadowings', methods=['POST'])
+def extract_foreshadowings(project_title):
+    """从大纲中提取伏笔"""
+    try:
+        data = request.json
+        outline = data.get('outline', [])
+        
+        print(f"[提取伏笔] 从大纲中提取伏笔")
+        
+        # 提取所有伏笔
+        foreshadowings = []
+        for chapter in outline:
+            chapter_num = chapter.get('chapter_number', 0)
+            
+            # 埋下的伏笔
+            if 'foreshadowing_planted' in chapter:
+                for fs in chapter['foreshadowing_planted']:
+                    if fs and fs.strip():
+                        foreshadowings.append({
+                            'content': fs.strip(),
+                            'chapter': chapter_num,
+                            'resolved': False,
+                            'resolved_chapter': None
+                        })
+            
+            # 回收的伏笔
+            if 'foreshadowing_resolved' in chapter:
+                for fs in chapter['foreshadowing_resolved']:
+                    if fs and fs.strip():
+                        # 查找并标记已回收
+                        for item in foreshadowings:
+                            if item['content'] == fs.strip() and not item['resolved']:
+                                item['resolved'] = True
+                                item['resolved_chapter'] = chapter_num
+                                break
+        
+        print(f"[提取伏笔] 提取到 {len(foreshadowings)} 个伏笔")
+        
+        return jsonify({
+            'success': True,
+            'data': {'foreshadowings': foreshadowings}
+        })
+        
+    except Exception as e:
+        print(f"[提取伏笔] 错误: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/projects/<project_title>/generate-short-story', methods=['POST'])
+def generate_short_story(project_title):
+    """生成短篇小说（使用已有大纲）"""
+    try:
+        data = request.json
+        outline = data.get('outline', [])
+        story_core = data.get('story_core', '')
+        foreshadowings = data.get('foreshadowings', [])
+        
+        if not outline:
+            return jsonify({
+                'success': False,
+                'error': '缺少大纲数据'
+            }), 400
+        
+        project = NovelProject.load(project_title)
+        
+        total_chapters = len(outline)
+        
+        # 保存短篇小说配置
+        if not hasattr(project, 'short_story_data'):
+            project.short_story_data = {}
+        project.short_story_data.update({
+            'outline': outline,
+            'story_core': story_core,
+            'foreshadowings': foreshadowings,
+            'generation_status': 'in_progress',
+            'completed_chapters': 0,
+            'total_chapters': total_chapters
+        })
+        project.save()
+        
+        print(f"[短篇小说] 开始生成 {total_chapters} 章短篇小说")
+        if story_core:
+            print(f"[短篇小说] 核心: {story_core[:100]}...")
+        if foreshadowings:
+            print(f"[短篇小说] 伏笔数量: {len(foreshadowings)}")
+        
+        # 启动后台任务生成
+        import threading
+        thread = threading.Thread(
+            target=generate_short_story_background,
+            args=(project_title, outline, story_core, foreshadowings)
+        )
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({
+            'success': True,
+            'data': {'message': '开始生成短篇小说'}
+        })
+    except Exception as e:
+        print(f"[短篇小说] 错误: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/projects/<project_title>/short-story-progress', methods=['GET'])
+def short_story_progress(project_title):
+    """查询短篇小说生成进度"""
+    try:
+        project = NovelProject.load(project_title)
+        short_story_data = getattr(project, 'short_story_data', {})
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'completed': short_story_data.get('completed_chapters', 0),
+                'total': short_story_data.get('total_chapters', 0),
+                'current_chapter': short_story_data.get('current_chapter', ''),
+                'status': short_story_data.get('generation_status', 'unknown')
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+def generate_short_story_background(project_title, outline, story_core, foreshadowings):
+    """后台生成短篇小说（使用已有大纲）"""
+    try:
+        project = NovelProject.load(project_title)
+        client = GrokClient()
+        
+        total_chapters = len(outline)
+        print(f"[短篇小说-后台] 开始逐章生成内容，共 {total_chapters} 章")
+        
+        # 保存大纲到项目
+        from novel_ai.core.project import ChapterOutline
+        project.chapter_outlines = []
+        for outline_data in outline:
+            chapter_outline = ChapterOutline(
+                chapter_number=outline_data['chapter_number'],
+                title=outline_data['title'],
+                summary=outline_data['summary'],
+                key_events=outline_data.get('key_events', []),
+                involved_characters=outline_data.get('involved_characters', []),
+                target_length=outline_data.get('target_length', 2000)
+            )
+            project.add_chapter_outline(chapter_outline)
+        project.save()
+        
+        # 逐章生成内容
+        for i, chapter_outline in enumerate(outline, 1):
+            project.short_story_data['current_chapter'] = f"第 {i} 章：{chapter_outline['title']}"
+            project.save()
+            
+            print(f"[短篇小说-后台] 生成第 {i}/{total_chapters} 章")
+            
+            # 构建章节生成提示词
+            target_length = chapter_outline.get('target_length', 2000)
+            chapter_prompt = f"""你是一位专业的短篇小说作家。请根据大纲撰写第 {i} 章的完整内容。
+
+章节信息：
+- 标题: {chapter_outline['title']}
+- 剧情概要: {chapter_outline['summary']}
+- 关键事件: {', '.join(chapter_outline.get('key_events', []))}
+- 目标字数: {target_length} 字左右
+
+"""
+            
+            # 添加前文上下文
+            if i > 1:
+                prev_chapters = project.chapters[max(0, i-3):i-1]  # 最多取前2章
+                if prev_chapters:
+                    chapter_prompt += "\n前文回顾（保持连贯）：\n"
+                    for prev_ch in prev_chapters:
+                        chapter_prompt += f"《{prev_ch.title}》：{prev_ch.content[:200]}...\n\n"
+            
+            # 添加伏笔信息
+            if 'foreshadowing_planted' in chapter_outline and chapter_outline['foreshadowing_planted']:
+                chapter_prompt += f"\n本章需要埋下的伏笔：{', '.join(chapter_outline['foreshadowing_planted'])}\n"
+            if 'foreshadowing_resolved' in chapter_outline and chapter_outline['foreshadowing_resolved']:
+                chapter_prompt += f"\n本章需要回收的伏笔：{', '.join(chapter_outline['foreshadowing_resolved'])}\n"
+            
+            chapter_prompt += f"""
+写作要求：
+1. 与前文自然衔接，无断裂感
+2. 章节结尾自然过渡，不要加"且看下回分解"等总结性语句
+3. 人物行为符合逻辑，情节发展合理
+4. 语言流畅生动，富有画面感
+5. 字数控制在 {target_length} 字左右
+
+请直接输出章节正文内容，不要包含章节标题。
+"""
+            
+            chapter_content = client._make_request([
+                {"role": "system", "content": "你是专业的短篇小说作家，擅长写作连贯流畅的故事。"},
+                {"role": "user", "content": chapter_prompt}
+            ])
+            
+            # 保存章节
+            from novel_ai.core.project import Chapter
+            chapter = Chapter(
+                title=chapter_outline['title'],
+                content=chapter_content.strip(),
+                chapter_number=i
+            )
+            project.add_chapter(chapter)
+            
+            # 更新进度
+            project.short_story_data['completed_chapters'] = i
+            project.save()
+            
+            print(f"[短篇小说-后台] 第 {i} 章完成，字数: {len(chapter_content)}")
+        
+        # 完成
+        project.short_story_data['generation_status'] = 'completed'
+        project.short_story_data['current_chapter'] = '全部完成'
+        project.save()
+        
+        print(f"[短篇小说-后台] 短篇小说生成完成！总计 {total_chapters} 章")
+        
+    except Exception as e:
+        print(f"[短篇小说-后台] 错误: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        
+        # 标记失败
+        try:
+            project = NovelProject.load(project_title)
+            project.short_story_data['generation_status'] = 'failed'
+            project.short_story_data['error'] = str(e)
+            project.save()
+        except:
+            pass
 
 
 # === 小说导入 ===

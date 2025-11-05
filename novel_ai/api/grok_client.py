@@ -240,6 +240,8 @@ class GrokClient:
         user_prompt_parts.append(f"❌ 不要突然改变角色性格或关系")
         user_prompt_parts.append(f"❌ 不要引入与主线无关的新情节")
         user_prompt_parts.append(f"❌ 不要让场景转换过于突兀")
+        user_prompt_parts.append(f"❌ 章节结尾必须是具体的情节或对话，直接结束即可，绝对不要加'且看下回分解'、'欲知后事如何'等总结性语句")
+        user_prompt_parts.append(f"❌ 不要写'本章完'、'未完待续'等提示语")
         
         # 如果有多个章节，添加情节递进要求
         if len(project.chapters) > 0:
@@ -1229,10 +1231,11 @@ class GrokClient:
         context_manager = ContextManager(max_tokens=self.max_tokens)
         
         # 构建上下文
+        # 增加历史摘要数量，让AI更清楚前面发生了什么，避免重复描述
         context = context_manager.build_writing_context(
             project,
             include_full_recent=2,
-            include_summary_count=8
+            include_summary_count=15  # 从8增加到15，涵盖更多历史信息
         )
         
         # 🔥 特别强调前一章的内容（用于衔接）
@@ -1299,6 +1302,9 @@ class GrokClient:
 5. **节奏把控**：张弛有度，不要平铺直叙
 6. **目标字数**：约{outline.target_length}字
 7. **承上启下**：既要呼应前文，又要为后续埋下伏笔
+8. **自然结尾**：章节结尾必须是具体的情节或对话，直接结束即可，绝对不要加"且看下回分解"、"欲知后事如何"等总结性语句，也不要写"本章完"
+9. **避免重复**：不要重复前面章节已经详细描述过的内容（如角色外貌、背景设定等），只需简短提及即可
+10. **保持沉浸感**：让读者沉浸在故事中，下一章会自然延续，不需要任何提示
 
 {f"【创作提示】{outline.notes}" if outline.notes else ""}
 

@@ -1445,6 +1445,9 @@
                                 <button class="btn" onclick="analyzeProjectWithAI()" style="margin-left: 10px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
                                     🤖 AI一键分析
                                 </button>
+                                <button class="btn" onclick="downloadNovel()" style="margin-left: 10px; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">
+                                    📥 下载小说
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -1520,6 +1523,9 @@
                             <button class="mode-btn" onclick="switchCreationMode('outline')" id="outlineModeBtn">
                                 📋 大纲模式
                             </button>
+                            <button class="mode-btn" onclick="switchCreationMode('shortStory')" id="shortStoryModeBtn">
+                                📖 短篇模式
+                            </button>
                         </div>
 
                         <!-- 直接生成模式 -->
@@ -1587,6 +1593,38 @@
                                 </div>
                                 <div id="outlineStatus"></div>
                                 
+                                <!-- 批量生成工具栏 -->
+                                <div id="batchGenerateBar" style="display: none; margin-top: 15px; padding: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; color: white;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <div>
+                                            <h4 style="margin: 0 0 5px 0; color: white;">⚡ 一键批量生成</h4>
+                                            <small style="opacity: 0.9;">选择章节范围，系统将自动按顺序生成所有章节</small>
+                                        </div>
+                                        <button class="btn" onclick="showBatchGenerateDialog()" style="background: white; color: #667eea; font-weight: 600;">
+                                            🚀 开始批量生成
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <!-- 批量生成进度条 -->
+                                <div id="batchGenerateProgress" style="display: none; margin-top: 15px; padding: 20px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #667eea;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                        <div>
+                                            <h4 style="margin: 0 0 5px 0; color: #667eea;">📊 批量生成进度</h4>
+                                            <div id="batchProgressText" style="color: #666;">准备中...</div>
+                                        </div>
+                                        <button class="btn btn-secondary" onclick="cancelBatchGenerate()" id="cancelBatchBtn">
+                                            ⏸️ 取消生成
+                                        </button>
+                                    </div>
+                                    <div style="width: 100%; height: 20px; background: #e0e0e0; border-radius: 10px; overflow: hidden; margin-top: 10px;">
+                                        <div id="batchProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); transition: width 0.3s;"></div>
+                                    </div>
+                                    <div id="batchProgressDetails" style="margin-top: 10px; font-size: 0.9em; color: #666;">
+                                        <!-- 详细进度信息 -->
+                                    </div>
+                                </div>
+                                
                                 <!-- 批量操作工具栏 -->
                                 <div id="bulkActionBar" style="display: none; margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #667eea;">
                                     <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -1605,6 +1643,157 @@
 
                             <!-- 大纲列表 -->
                             <div id="outlineList"></div>
+                        </div>
+                    </div>
+
+                        <!-- 短篇小说模式 -->
+                        <div id="shortStoryMode" class="creation-mode" style="display: none;">
+                            <div class="card" style="background: linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 100%); border: none; margin-bottom: 20px;">
+                                <h3 style="color: #2d3436;">📖 短篇小说创作模式</h3>
+                                <p style="color: #2d3436; margin-bottom: 10px;">
+                                    适合10-20章的短篇故事，注重整体连贯性和伏笔回收
+                                </p>
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 15px;">
+                                    <div style="background: rgba(255,255,255,0.5); padding: 10px; border-radius: 8px;">
+                                        <div style="font-weight: 600;">✨ 整体规划</div>
+                                        <small>先生成完整大纲</small>
+                                    </div>
+                                    <div style="background: rgba(255,255,255,0.5); padding: 10px; border-radius: 8px;">
+                                        <div style="font-weight: 600;">🔗 自然衔接</div>
+                                        <small>章节间无断裂感</small>
+                                    </div>
+                                    <div style="background: rgba(255,255,255,0.5); padding: 10px; border-radius: 8px;">
+                                        <div style="font-weight: 600;">🎯 伏笔追踪</div>
+                                        <small>自动管理和回收</small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 第一步：故事核心 -->
+                            <div class="card" id="shortStoryStep1">
+                                <h3>📝 第一步：确定故事核心</h3>
+                                <div class="form-group">
+                                    <label>故事核心</label>
+                                    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                                        <button class="btn btn-secondary" onclick="generateStoryCores()" id="generateCoresBtn">
+                                            🤖 AI 生成 3 个故事核心方案
+                                        </button>
+                                        <button class="btn btn-secondary" onclick="showManualCoreInput()">
+                                            ✍️ 手动输入
+                                        </button>
+                                    </div>
+                                    <div id="storyCoreOptions" style="display: none; margin-top: 15px;">
+                                        <!-- AI 生成的故事核心选项 -->
+                                    </div>
+                                    <div id="manualCoreInput" style="display: none; margin-top: 15px;">
+                                        <textarea id="shortStoryCore" placeholder="请描述故事的核心主题和主要冲突，例如：&#10;&#10;这是一个关于救赎与自我发现的故事。主角李明是一名曾经的天才程序员，因为一次重大的技术失误导致公司破产、同事失业。在众人指责和自责中，他选择逃避到一个偏远小镇。在那里，他遇到了一群淳朴的村民和一个需要技术帮助的留守儿童学校。通过帮助这些孩子搭建在线教育平台，李明逐渐找回了对技术的热爱和对生活的信心，最终勇敢面对过去的错误，并用自己的方式补偿了曾经伤害过的人。&#10;&#10;故事将探讨：科技与人性、逃避与面对、个人价值的重新发现等主题。" rows="8"></textarea>
+                                        <button class="btn" onclick="confirmStoryCore()" style="margin-top: 10px;">确认故事核心</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 第二步：创作参数配置 -->
+                            <div class="card" id="shortStoryStep2" style="display: none;">
+                                <h3>⚙️ 第二步：配置创作参数</h3>
+                                <div class="form-group">
+                                    <label>总章节数 *</label>
+                                    <div style="display: flex; gap: 10px; align-items: center;">
+                                        <input type="number" id="shortStoryTotalChapters" value="15" min="5" max="30" style="width: 150px;">
+                                        <small style="color: #666;">推荐 10-20 章</small>
+                                        <button class="btn btn-secondary" onclick="aiSuggestChapterCount()" style="padding: 5px 15px; font-size: 0.9em;">
+                                            🤖 AI 建议
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>每章平均字数 *</label>
+                                    <div style="display: flex; gap: 10px; align-items: center;">
+                                        <input type="number" id="shortStoryChapterLength" value="2000" min="1000" max="4000" step="100" style="width: 150px;">
+                                        <small style="color: #666;">推荐 1500-2500 字</small>
+                                        <button class="btn btn-secondary" onclick="aiSuggestChapterLength()" style="padding: 5px 15px; font-size: 0.9em;">
+                                            🤖 AI 建议
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>故事节奏</label>
+                                    <div style="display: flex; gap: 10px; align-items: center;">
+                                        <select id="shortStoryPace" style="width: 200px;">
+                                            <option value="fast">快节奏（紧凑刺激）</option>
+                                            <option value="moderate" selected>中等节奏（平衡发展）</option>
+                                            <option value="slow">慢节奏（细腻描写）</option>
+                                        </select>
+                                        <button class="btn btn-secondary" onclick="aiSuggestPace()" style="padding: 5px 15px; font-size: 0.9em;">
+                                            🤖 AI 建议
+                                        </button>
+                                    </div>
+                                </div>
+                                <div style="text-align: center; margin-top: 20px;">
+                                    <button class="btn" onclick="generateOutlinePreview()" style="font-size: 1.1em; padding: 12px 30px;">
+                                        📋 生成大纲预览
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- 第三步：大纲预览 -->
+                            <div class="card" id="shortStoryStep3" style="display: none;">
+                                <h3>📋 第三步：大纲预览与调整</h3>
+                                <div id="outlinePreviewArea" style="margin-top: 15px;">
+                                    <!-- 大纲预览内容 -->
+                                </div>
+                                <div style="text-align: center; margin-top: 20px; display: flex; gap: 10px; justify-content: center;">
+                                    <button class="btn btn-secondary" onclick="regenerateOutline()">
+                                        🔄 重新生成大纲
+                                    </button>
+                                    <button class="btn" onclick="proceedToForeshadowing()">
+                                        ➡️ 继续：设置伏笔
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- 第四步：伏笔设置 -->
+                            <div class="card" id="shortStoryStep4" style="display: none;">
+                                <h3>🎯 第四步：伏笔设置（可选）</h3>
+                                <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
+                                    根据大纲设置伏笔，AI 会确保这些伏笔在后续章节中自然回收
+                                </p>
+                                <div style="margin-bottom: 15px;">
+                                    <button class="btn btn-secondary" onclick="aiGenerateForeshadowings()" style="margin-bottom: 15px;">
+                                        🤖 AI 自动提取伏笔
+                                    </button>
+                                </div>
+                                <div id="foreshadowingList" style="margin-bottom: 15px;">
+                                    <!-- 伏笔列表 -->
+                                </div>
+                                <div style="display: flex; gap: 10px;">
+                                    <button class="btn btn-secondary" onclick="showAddForeshadowingDialog()">
+                                        ➕ 手动添加伏笔
+                                    </button>
+                                </div>
+                                <div style="text-align: center; margin-top: 20px;">
+                                    <button class="btn" onclick="startFullGeneration()" style="font-size: 1.2em; padding: 15px 40px;">
+                                        🚀 开始完整创作
+                                    </button>
+                                    <p style="color: #999; margin-top: 10px; font-size: 0.9em;">
+                                        ⏱️ 预计耗时：约 <span id="estimatedTime">10-15</span> 分钟
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- 短篇进度显示 -->
+                            <div class="card" id="shortStoryProgress" style="display: none;">
+                                <h3>📊 创作进度</h3>
+                                <div style="background: #f5f7fa; padding: 15px; border-radius: 8px; margin-top: 10px;">
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                                        <span>进度:</span>
+                                        <span id="shortStoryProgressText">0 / 0</span>
+                                    </div>
+                                    <div style="background: #e0e0e0; height: 20px; border-radius: 10px; overflow: hidden;">
+                                        <div id="shortStoryProgressBar" style="background: linear-gradient(90deg, #667eea, #764ba2); height: 100%; width: 0%; transition: width 0.3s;"></div>
+                                    </div>
+                                    <div id="shortStoryCurrentChapter" style="margin-top: 10px; color: #666; font-size: 0.9em;"></div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
