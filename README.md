@@ -56,7 +56,31 @@ XAI_API_KEY=your_grok_api_key_here
 XAI_BASE_URL=https://api.x.ai/v1
 ```
 
-## 🚀 使用方法
+### � 配置 Web 访问密码（重要！）
+
+**默认密码**: `novelgrok2024`
+
+**生产环境请务必修改密码：**
+
+```bash
+# 方法1: 使用密码设置工具（推荐）
+python set_password.py
+
+# 方法2: 直接在 .env 中添加密码哈希
+# 运行以下命令生成密码哈希
+python -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('你的密码'))"
+
+# 将输出的哈希值添加到 .env 文件：
+# WEB_PASSWORD_HASH=pbkdf2:sha256:...
+```
+
+**安全建议**:
+- ✅ 使用强密码（至少8位，包含字母、数字、特殊字符）
+- ✅ 定期更换密码
+- ✅ 不要将密码明文保存在代码或配置文件中
+- ✅ 部署到公网时务必使用 HTTPS
+
+## �🚀 使用方法
 
 ### 🌐 Web界面（推荐）
 
@@ -66,6 +90,8 @@ python web_api.py
 
 # 在浏览器中访问
 http://localhost:5001
+
+# 首次访问需要登录（默认密码: novelgrok2024）
 ```
 
 **Web界面功能**：

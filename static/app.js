@@ -16,6 +16,35 @@ document.addEventListener('DOMContentLoaded', () => {
     checkAPIStatus();
 });
 
+// ========== 登录/登出 ==========
+
+async function logout() {
+    if (!confirm('确定要退出登录吗？')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/logout', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // 退出成功，跳转到登录页
+            window.location.href = '/login';
+        } else {
+            alert('退出失败: ' + data.error);
+        }
+    } catch (error) {
+        console.error('退出失败:', error);
+        alert('退出失败: ' + error.message);
+    }
+}
+
 // ========== 工具函数 ==========
 
 function showLoading(containerId) {
@@ -305,6 +334,16 @@ async function apiCall(url, options = {}) {
                 ...options.headers
             }
         });
+        
+        // 检查是否需要登录
+        if (response.status === 401) {
+            const data = await response.json();
+            if (data.require_login) {
+                alert('登录已过期，请重新登录');
+                window.location.href = '/login';
+                return;
+            }
+        }
         
         const data = await response.json();
         

@@ -7,9 +7,13 @@ NovelGrok Web API
 
 import os
 import traceback
-from flask import Flask, render_template, jsonify, request
+import secrets
+from datetime import datetime, timedelta
+from functools import wraps
+from flask import Flask, render_template, jsonify, request, session, redirect, url_for
 from flask_cors import CORS
 from dotenv import load_dotenv
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from novel_ai.core.project import NovelProject, Character, Chapter
 from novel_ai.core.context_manager import ContextManager
@@ -23,6 +27,14 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)  # 允许跨域请求
 
+# 配置 session 密钥（从环境变量读取，如果没有则生成一个）
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', secrets.token_hex(32))
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)  # session 有效期24小时
+
+# 密码配置（从环境变量读取）
+# 默认密码: novelgrok2024 （请在 .env 中修改）
+PASSWORD_HASH = os.getenv('WEB_PASSWORD_HASH') or generate_password_hash('novelgrok2024')
+
 # 全局变量
 context_manager = ContextManager(max_tokens=20000)
 
@@ -32,18 +44,108 @@ generation_status = {
 }
 
 
+# ========== 登录验证 ==========
+
+def login_required(f):
+    """登录验证装饰器"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('logged_in'):
+            # API 请求返回 401
+            if request.path.startswith('/api/'):
+                return jsonify({'success': False, 'error': '未登录', 'require_login': True}), 401
+            # 页面请求重定向到登录页
+            return redirect(url_for('login_page'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+
 # ========== 页面路由 ==========
 
+@app.route('/login')
+def login_page():
+    """登录页面"""
+    if session.get('logged_in'):
+        return redirect(url_for('index'))
+    return render_template('login.html')
+
+
+@app.route('/api/login', methods=['POST'])
+def login():
+    """登录接口"""
+    try:
+        data = request.get_json()
+        password = data.get('password', '')
+        
+        if check_password_hash(PASSWORD_HASH, password):
+            session['logged_in'] = True
+            session.permanent = True  # 使用持久化 session
+            return jsonify({
+                'success': True,
+                'message': '登录成功'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': '密码错误'
+            }), 401
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/logout', methods=['POST'])
+def logout():
+    """退出登录"""
+    session.clear()
+    return jsonify({
+        'success': True,
+        'message': '已退出登录'
+    })
+
+
+@app.route('/api/check-auth', methods=['GET'])
+def check_auth():
+    """检查登录状态"""
+    return jsonify({
+        'success': True,
+        'logged_in': session.get('logged_in', False)
+    })
+
+
 @app.route('/')
+@login_required
 def index():
     """主页面"""
     return render_template('index.html')
 
 
 @app.route('/reader')
+@login_required
 def reader():
     """小说阅读器页面"""
     return render_template('reader.html')
+
+
+# ========== 全局请求拦截 ==========
+
+@app.before_request
+def check_login():
+    """所有请求前检查登录状态（除了登录相关接口）"""
+    # 白名单：不需要登录的路径
+    whitelist = ['/login', '/api/login', '/api/check-auth', '/static/']
+    
+    # 检查是否在白名单中
+    for path in whitelist:
+        if request.path.startswith(path):
+            return None
+    
+    # 其他所有请求都需要登录
+    if not session.get('logged_in'):
+        if request.path.startswith('/api/'):
+            return jsonify({'success': False, 'error': '未登录', 'require_login': True}), 401
+        return redirect(url_for('login_page'))
+    
+    return None
 
 
 # ========== API路由 ==========
