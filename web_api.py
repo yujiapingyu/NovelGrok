@@ -1497,14 +1497,21 @@ def main():
     print("=" * 60)
     print("NovelGrok Web界面启动中...")
     print("=" * 60)
+    # 从环境变量读取配置
+    host = os.getenv('WEB_HOST', '0.0.0.0')
+    port = int(os.getenv('WEB_PORT', '5001'))
+    debug = os.getenv('WEB_DEBUG', 'False').lower() in ('true', '1', 'yes')
+    
     print()
-    print("访问地址: http://localhost:5001")
+    print(f"访问地址: http://localhost:{port}")
+    if host == '0.0.0.0':
+        print(f"公网访问: http://<your-ip>:{port}")
     print()
     print("按 Ctrl+C 停止服务器")
     print("=" * 60)
     print()
     
-    app.run(host='0.0.0.0', port=5001, debug=True)
+    app.run(host=host, port=port, debug=debug)
 
 
 @app.route('/api/projects/<project_title>/regenerate-outline-range', methods=['POST'])
