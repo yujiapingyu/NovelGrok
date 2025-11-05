@@ -1549,11 +1549,19 @@
                                     💡 推荐：1500-3000字（质量更好）。4000字以上生成时间较长。
                                 </p>
                             </div>
-                            <div class="form-group">
-                                <label>
-                                    <input type="checkbox" id="aiGenerateSummary" checked>
-                                    自动生成摘要
-                                </label>
+                            <div class="form-group" style="background: linear-gradient(135deg, #f5f7fa 0%, #e8eaf6 100%); padding: 15px; border-radius: 10px; border: 2px solid #e1e8ed;">
+                                <div style="display: flex; align-items: center; justify-content: space-between;">
+                                    <div style="flex: 1;">
+                                        <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                                            <span style="font-size: 1em; font-weight: 600; color: #2c3e50;">📝 自动生成摘要</span>
+                                        </div>
+                                        <small style="color: #7f8c8d;">为章节生成AI摘要，便于后续上下文管理</small>
+                                    </div>
+                                    <label class="toggle-switch" style="margin-left: 15px;">
+                                        <input type="checkbox" id="aiGenerateSummary">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
                             </div>
                             <button class="btn" id="generateChapterBtn" onclick="confirmAndGenerate()">🚀 生成章节</button>
                             <p style="font-size: 0.9em; color: #999; margin-top: 10px; text-align: center;">
