@@ -50,6 +50,7 @@ class Character:
     personality: str = ""
     background: str = ""
     relationships: Dict[str, str] = field(default_factory=dict)
+    aliases: List[str] = field(default_factory=list)  # 别名列表（如："林老师"、"小颜"等）
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     
     def to_dict(self) -> dict:
@@ -59,7 +60,37 @@ class Character:
     @classmethod
     def from_dict(cls, data: dict) -> "Character":
         """从字典创建"""
+        # 兼容旧数据：如果没有aliases字段，添加一个空列表
+        if 'aliases' not in data:
+            data['aliases'] = []
         return cls(**data)
+    
+    def add_alias(self, alias: str) -> bool:
+        """
+        添加别名
+        
+        Args:
+            alias: 别名
+            
+        Returns:
+            是否成功添加（如果已存在则返回False）
+        """
+        if alias and alias not in self.aliases and alias != self.name:
+            self.aliases.append(alias)
+            return True
+        return False
+    
+    def has_alias(self, name: str) -> bool:
+        """
+        检查是否是这个角色的别名（包括正式名字）
+        
+        Args:
+            name: 要检查的名字
+            
+        Returns:
+            是否匹配
+        """
+        return name == self.name or name in self.aliases
     
     def get_full_description(self) -> str:
         """获取完整的角色描述"""
@@ -147,14 +178,87 @@ class NovelProject:
         self.updated_at = datetime.now().isoformat()
     
     def get_character(self, name: str) -> Optional[Character]:
-        """获取角色"""
+        """获取角色（支持别名查找）"""
+        for char in self.characters:
+            if char.has_alias(name):
+                return char
+        return None
+    
+    def get_character_by_exact_name(self, name: str) -> Optional[Character]:
+        """通过精确名字获取角色（不查找别名）"""
         for char in self.characters:
             if char.name == name:
                 return char
         return None
     
+    def find_character_canonical_name(self, name: str) -> Optional[str]:
+        """
+        查找角色的正式名字（别名会被转换为正式名字）
+        
+        Args:
+            name: 可能是别名的名字
+            
+        Returns:
+            正式名字，如果找不到则返回None
+        """
+        char = self.get_character(name)
+        return char.name if char else None
+    
+    def add_character_alias(self, character_name: str, alias: str) -> bool:
+        """
+        为角色添加别名
+        
+        Args:
+            character_name: 角色的正式名字
+            alias: 要添加的别名
+            
+        Returns:
+            是否成功添加
+        """
+        char = self.get_character_by_exact_name(character_name)
+        if char:
+            success = char.add_alias(alias)
+            if success:
+                self.updated_at = datetime.now().isoformat()
+            return success
+        return False
+    
+    def merge_character_aliases(self, main_name: str, alias_names: List[str]) -> bool:
+        """
+        合并角色别名（将多个名字识别为同一个角色）
+        
+        Args:
+            main_name: 主要角色名（保留这个）
+            alias_names: 要合并为别名的其他名字
+            
+        Returns:
+            是否成功合并
+        """
+        main_char = self.get_character_by_exact_name(main_name)
+        if not main_char:
+            return False
+        
+        for alias_name in alias_names:
+            if alias_name == main_name:
+                continue
+            
+            # 添加为别名
+            main_char.add_alias(alias_name)
+            
+            # 如果这个别名本身是一个独立的角色，需要合并数据并删除
+            alias_char = self.get_character_by_exact_name(alias_name)
+            if alias_char:
+                # 合并角色追踪数据
+                self.character_tracker.merge_character_data(alias_name, main_name)
+                
+                # 删除重复的角色记录
+                self.remove_character(alias_name)
+        
+        self.updated_at = datetime.now().isoformat()
+        return True
+    
     def remove_character(self, name: str) -> bool:
-        """删除角色"""
+        """删除角色（按精确名字）"""
         for i, char in enumerate(self.characters):
             if char.name == name:
                 self.characters.pop(i)

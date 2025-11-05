@@ -607,13 +607,22 @@ class GrokClient:
         
         character_names = [char.name for char in project.characters]
         
-        # 获取角色当前状态，帮助更准确的分析
+        # 获取角色当前状态和别名，帮助更准确的分析
         character_context = []
         tracker = project.character_tracker
-        for char_name in character_names:
+        for char in project.characters:
+            char_name = char.name
             traits = tracker.get_personality_traits(char_name)
             rels = tracker.get_all_relationships(char_name)
-            context = f"{char_name}（"
+            
+            # 构建角色上下文信息
+            context = f"{char_name}"
+            
+            # 添加别名信息
+            if char.aliases:
+                context += f"（别名：{', '.join(char.aliases)}）"
+            
+            context += "（"
             if traits:
                 context += "特质:" + ",".join([f"{t.trait_name}({t.intensity})" for t in traits[:2]]) + "；"
             if rels:
@@ -784,8 +793,50 @@ class GrokClient:
         print(f"   角色数量: {len(project.characters)}")
         print(f"   章节字数: {chapter.word_count}")
         
+        # 第一步：识别角色别名
+        if project.characters:
+            print(f"\n🔍 识别角色别名...")
+            known_character_names = [char.name for char in project.characters]
+            aliases = self.identify_character_aliases(
+                chapter_content=chapter.content,
+                known_characters=known_character_names
+            )
+            
+            # 自动添加识别到的别名
+            for char_name, alias_list in aliases.items():
+                char = project.get_character_by_exact_name(char_name)
+                if char:
+                    for alias in alias_list:
+                        if char.add_alias(alias):
+                            print(f"   ✅ 为 {char_name} 添加别名: {alias}")
+        
+        # 第二步：分析角色事件
         analysis = self.analyze_chapter_for_character_events(project, chapter)
         tracker = project.character_tracker
+        
+        # 第三步：将分析结果中的别名统一转换为正式名字
+        def normalize_character_name(name: str) -> str:
+            """将可能的别名转换为正式名字"""
+            canonical = project.find_character_canonical_name(name)
+            return canonical if canonical else name
+        
+        # 转换experiences中的角色名
+        for exp in analysis.get("experiences", []):
+            exp["character"] = normalize_character_name(exp["character"])
+            if "related_characters" in exp:
+                exp["related_characters"] = [
+                    normalize_character_name(name) 
+                    for name in exp["related_characters"]
+                ]
+        
+        # 转换relationships中的角色名
+        for rel in analysis.get("relationships", []):
+            rel["character"] = normalize_character_name(rel["character"])
+            rel["target"] = normalize_character_name(rel["target"])
+        
+        # 转换personality_changes中的角色名
+        for pc in analysis.get("personality_changes", []):
+            pc["character"] = normalize_character_name(pc["character"])
         
         # 统计
         exp_count = len(analysis.get("experiences", []))
@@ -1775,5 +1826,133 @@ class GrokClient:
             import traceback
             traceback.print_exc()
             raise
+    
+    def identify_character_aliases(
+        self,
+        chapter_content: str,
+        known_characters: List[str],
+        max_content_length: int = 10000
+    ) -> Dict[str, List[str]]:
+        """
+        识别章节中出现的角色别名
+        
+        Args:
+            chapter_content: 章节内容
+            known_characters: 已知的角色正式名字列表
+            max_content_length: 最大分析内容长度
+        
+        Returns:
+            字典，key为正式名字，value为在本章中出现的别名列表
+            例如: {"林歆颜": ["林老师", "小颜", "妻子"], "张明": ["老公", "明哥"]}
+        """
+        # 限制内容长度
+        if len(chapter_content) > max_content_length:
+            chapter_content = chapter_content[:max_content_length]
+        
+        system_prompt = """你是一位专业的文本分析专家，擅长识别小说中同一个角色的不同称呼。"""
+        
+        user_prompt = f"""请分析以下小说章节，识别出每个角色在文中的**所有不同称呼**（别名、昵称、关系称呼等）。
+
+【已知角色列表】：
+{chr(10).join(f'- {name}' for name in known_characters)}
+
+【章节内容】：
+{chapter_content}
+
+【分析要求】：
+1. 对于每个已知角色，找出在文中出现的**所有不同称呼**
+2. 包括但不限于：
+   - 昵称、小名（如"小颜"、"小明"）
+   - 职业称呼（如"林老师"、"王医生"）
+   - 关系称呼（如"妻子"、"老公"、"妈妈"）
+   - 敬称（如"林总"、"张哥"）
+   - 其他指代（如"那个女人"、"他"等代词不用）
+3. 只识别**明确指代某个角色的称呼**，不要包含模糊的代词
+4. 如果某个角色在本章没有出现或只用正式名字，则不返回该角色
+
+【输出格式】（必须是有效的JSON）：
+```json
+{{
+  "角色正式名字": ["别名1", "别名2", "别名3"],
+  "另一个角色": ["别名1", "别名2"]
+}}
+```
+
+⚠️ 注意：
+- 只返回JSON对象，不要其他内容
+- 别名应该是实际在文中出现的称呼
+- 不要返回正式名字本身
+- 如果某个角色没有别名，不要在结果中包含该角色
+"""
+        
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        
+        try:
+            response = self._make_request(messages, temperature=0.2, max_tokens=2000)
+            
+            # 提取JSON
+            import re
+            import json
+            
+            # 提取JSON代码块
+            json_match = re.search(r'```json\s*(.*?)\s*```', response, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(1).strip()
+            else:
+                json_match = re.search(r'```\s*(.*?)\s*```', response, re.DOTALL)
+                if json_match:
+                    json_str = json_match.group(1).strip()
+                else:
+                    json_str = response.strip()
+            
+            # 查找JSON对象
+            start_idx = json_str.find('{')
+            end_idx = json_str.rfind('}')
+            
+            if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                json_str = json_str[start_idx:end_idx + 1]
+            
+            # 解析JSON
+            aliases = json.loads(json_str)
+            
+            # 验证返回的是字典
+            if not isinstance(aliases, dict):
+                print(f"⚠️ 返回的不是字典: {type(aliases)}")
+                return {}
+            
+            # 验证每个值都是列表
+            validated_aliases = {}
+            for char_name, alias_list in aliases.items():
+                if char_name in known_characters:
+                    if isinstance(alias_list, list):
+                        # 过滤掉空字符串和正式名字本身
+                        validated_list = [
+                            alias for alias in alias_list 
+                            if alias and isinstance(alias, str) and alias != char_name
+                        ]
+                        if validated_list:
+                            validated_aliases[char_name] = validated_list
+            
+            if validated_aliases:
+                print(f"✅ 识别到角色别名:")
+                for char, aliases in validated_aliases.items():
+                    print(f"   {char}: {', '.join(aliases)}")
+            else:
+                print("ℹ️ 本章未识别到新的角色别名")
+            
+            return validated_aliases
+            
+        except json.JSONDecodeError as e:
+            print(f"⚠️ 别名识别失败 (JSON解析错误): {e}")
+            print(f"   响应内容: {response[:300]}...")
+            return {}
+        except Exception as e:
+            print(f"⚠️ 别名识别失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return {}
 
 

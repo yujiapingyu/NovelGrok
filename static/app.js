@@ -563,8 +563,37 @@ function showImportNovelModal() {
     document.getElementById('previewImportBtn').style.display = 'inline-block';
     document.getElementById('confirmImportBtn').style.display = 'none';
     updateImportContentSize();
+    updateTrackingDisplay(); // 更新追踪选项显示
     
     showModal('importNovelModal');
+}
+
+function updateTrackingDisplay() {
+    const checkbox = document.getElementById('importExtractCharacters');
+    const optionalFeature = document.getElementById('trackingOptionalFeature');
+    const card = document.getElementById('trackingOptionCard');
+    
+    if (checkbox.checked) {
+        // 开启状态：显示完整功能，紫色渐变背景
+        optionalFeature.style.opacity = '1';
+        optionalFeature.innerHTML = `
+            <span style="color: #667eea; margin-right: 6px; font-weight: 600;">✓</span>
+            <small style="color: #34495e; font-weight: 500;">逐章追踪：角色经历、关系变化、性格发展</small>
+            <small style="color: #e74c3c; margin-left: 6px; font-style: italic;">（需要较长时间）</small>
+        `;
+        card.style.background = 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)';
+        card.style.borderColor = '#e1e8ed';
+    } else {
+        // 关闭状态：显示禁用的功能，灰色背景
+        optionalFeature.style.opacity = '0.5';
+        optionalFeature.innerHTML = `
+            <span style="color: #95a5a6; margin-right: 6px; font-weight: 600;">✗</span>
+            <small style="color: #7f8c8d; font-weight: 500; text-decoration: line-through;">逐章追踪：角色经历、关系变化、性格发展</small>
+            <small style="color: #95a5a6; margin-left: 6px; font-style: italic;">（已跳过）</small>
+        `;
+        card.style.background = 'linear-gradient(135deg, #ecf0f1 0%, #bdc3c7 100%)';
+        card.style.borderColor = '#95a5a6';
+    }
 }
 
 function updateImportContentSize() {
@@ -831,18 +860,32 @@ function updateCharactersTab() {
         return;
     }
     
-    characterList.innerHTML = characters.map(char => `
-        <div class="card character-card">
-            <div class="card-actions">
-                <button class="icon-btn" onclick="editCharacter('${char.name}')" title="编辑">✏️</button>
-                <button class="icon-btn" onclick="deleteCharacter('${char.name}')" title="删除">🗑️</button>
+    characterList.innerHTML = characters.map(char => {
+        // 生成别名标签HTML
+        let aliasesHtml = '';
+        if (char.aliases && char.aliases.length > 0) {
+            aliasesHtml = `
+                <p><strong>别名：</strong>
+                    <span class="aliases-container">
+                        ${char.aliases.map(alias => `<span class="alias-tag">${alias}</span>`).join('')}
+                    </span>
+                </p>`;
+        }
+        
+        return `
+            <div class="card character-card">
+                <div class="card-actions">
+                    <button class="icon-btn" onclick="editCharacter('${char.name}')" title="编辑">✏️</button>
+                    <button class="icon-btn" onclick="deleteCharacter('${char.name}')" title="删除">🗑️</button>
+                </div>
+                <h3>👤 ${char.name}</h3>
+                ${aliasesHtml}
+                <p><strong>描述：</strong>${char.description}</p>
+                ${char.personality ? `<p><strong>性格：</strong>${char.personality}</p>` : ''}
+                ${char.background ? `<p><strong>背景：</strong>${char.background}</p>` : ''}
             </div>
-            <h3>👤 ${char.name}</h3>
-            <p><strong>描述：</strong>${char.description}</p>
-            ${char.personality ? `<p><strong>性格：</strong>${char.personality}</p>` : ''}
-            ${char.background ? `<p><strong>背景：</strong>${char.background}</p>` : ''}
-        </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 function showAddCharacterModal() {
@@ -1336,15 +1379,24 @@ function updateCharacterTrackingSelect() {
         return;
     }
     
-    dropdown.innerHTML = currentProject.characters.map(char => `
-        <div class="character-option" onclick="selectCharacter('${char.name.replace(/'/g, "\\'")}', event)">
-            <div class="avatar">👤</div>
-            <div class="info">
-                <div class="name">${char.name}</div>
-                <div class="desc">${char.description || '暂无描述'}</div>
+    dropdown.innerHTML = currentProject.characters.map(char => {
+        // 生成别名显示
+        let aliasesText = '';
+        if (char.aliases && char.aliases.length > 0) {
+            aliasesText = `<div class="aliases-text" style="font-size:0.85em; color:#999; margin-top:2px;">别名: ${char.aliases.join(', ')}</div>`;
+        }
+        
+        return `
+            <div class="character-option" onclick="selectCharacter('${char.name.replace(/'/g, "\\'")}', event)">
+                <div class="avatar">👤</div>
+                <div class="info">
+                    <div class="name">${char.name}</div>
+                    <div class="desc">${char.description || '暂无描述'}</div>
+                    ${aliasesText}
+                </div>
             </div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
     
     // 自动选择第一个角色并加载数据
     if (currentProject.characters.length > 0) {
@@ -1412,6 +1464,41 @@ function updateCharacterTrackingSelect_old() {
     }
 }
 
+function displayCharacterBasicInfo(characterName) {
+    const container = document.getElementById('characterBasicInfo');
+    
+    // 找到当前角色
+    const char = currentProject.characters.find(c => c.name === characterName);
+    
+    if (!char) {
+        container.innerHTML = '<p style="color:#999;">角色信息未找到</p>';
+        return;
+    }
+    
+    // 生成别名显示
+    let aliasesHtml = '';
+    if (char.aliases && char.aliases.length > 0) {
+        aliasesHtml = `
+            <div style="margin-top: 12px;">
+                <strong style="color: #555;">别名：</strong>
+                <div class="aliases-container" style="display: inline-block;">
+                    ${char.aliases.map(alias => `<span class="alias-tag">${alias}</span>`).join('')}
+                </div>
+            </div>
+        `;
+    }
+    
+    container.innerHTML = `
+        <div style="line-height: 1.8;">
+            <div><strong style="color: #555;">正式名称：</strong>${char.name}</div>
+            ${aliasesHtml}
+            ${char.description ? `<div style="margin-top: 12px;"><strong style="color: #555;">描述：</strong>${char.description}</div>` : ''}
+            ${char.personality ? `<div style="margin-top: 12px;"><strong style="color: #555;">性格：</strong>${char.personality}</div>` : ''}
+            ${char.background ? `<div style="margin-top: 12px;"><strong style="color: #555;">背景：</strong>${char.background}</div>` : ''}
+        </div>
+    `;
+}
+
 async function loadCharacterTracking() {
     const characterName = selectedCharacter;
     
@@ -1434,6 +1521,9 @@ async function loadCharacterTracking() {
             ...data,
             character_name: characterName
         };
+        
+        // 显示角色基本信息（包括别名）
+        displayCharacterBasicInfo(characterName);
         
         // 显示关系网络
         displayRelationshipNetwork(data.relationships);

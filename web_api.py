@@ -425,6 +425,159 @@ def delete_character(project_title, character_name):
         }), 500
 
 
+# === 角色别名管理 ===
+
+@app.route('/api/projects/<project_title>/characters/<character_name>/aliases', methods=['GET'])
+def get_character_aliases(project_title, character_name):
+    """获取角色的所有别名"""
+    try:
+        project = NovelProject.load(project_title)
+        char = project.get_character_by_exact_name(character_name)
+        
+        if not char:
+            return jsonify({
+                'success': False,
+                'error': f'角色不存在: {character_name}'
+            }), 404
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'name': char.name,
+                'aliases': char.aliases
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/projects/<project_title>/characters/<character_name>/aliases', methods=['POST'])
+def add_character_alias(project_title, character_name):
+    """为角色添加别名"""
+    try:
+        project = NovelProject.load(project_title)
+        data = request.json
+        alias = data.get('alias', '').strip()
+        
+        if not alias:
+            return jsonify({
+                'success': False,
+                'error': '别名不能为空'
+            }), 400
+        
+        # 检查别名是否已经被其他角色使用
+        existing_char = project.get_character(alias)
+        if existing_char and existing_char.name != character_name:
+            return jsonify({
+                'success': False,
+                'error': f'别名"{alias}"已被角色"{existing_char.name}"使用'
+            }), 400
+        
+        if project.add_character_alias(character_name, alias):
+            project.save()
+            return jsonify({
+                'success': True,
+                'message': f'别名已添加: {alias}',
+                'data': {
+                    'name': character_name,
+                    'aliases': project.get_character_by_exact_name(character_name).aliases
+                }
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': '添加别名失败（可能已存在或角色不存在）'
+            }), 400
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/projects/<project_title>/characters/<character_name>/aliases/<alias>', methods=['DELETE'])
+def remove_character_alias(project_title, character_name, alias):
+    """删除角色别名"""
+    try:
+        project = NovelProject.load(project_title)
+        char = project.get_character_by_exact_name(character_name)
+        
+        if not char:
+            return jsonify({
+                'success': False,
+                'error': f'角色不存在: {character_name}'
+            }), 404
+        
+        if alias in char.aliases:
+            char.aliases.remove(alias)
+            project.save()
+            return jsonify({
+                'success': True,
+                'message': f'别名已删除: {alias}',
+                'data': {
+                    'name': character_name,
+                    'aliases': char.aliases
+                }
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': f'别名不存在: {alias}'
+            }), 404
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/projects/<project_title>/characters/merge', methods=['POST'])
+def merge_characters(project_title):
+    """合并角色（将多个角色识别为同一个）"""
+    try:
+        project = NovelProject.load(project_title)
+        data = request.json
+        
+        main_name = data.get('main_name', '').strip()
+        alias_names = data.get('alias_names', [])
+        
+        if not main_name:
+            return jsonify({
+                'success': False,
+                'error': '主角色名不能为空'
+            }), 400
+        
+        if not alias_names:
+            return jsonify({
+                'success': False,
+                'error': '要合并的别名列表不能为空'
+            }), 400
+        
+        if project.merge_character_aliases(main_name, alias_names):
+            project.save()
+            return jsonify({
+                'success': True,
+                'message': f'已将 {len(alias_names)} 个角色合并到 {main_name}',
+                'data': {
+                    'name': main_name,
+                    'aliases': project.get_character_by_exact_name(main_name).aliases
+                }
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': '合并失败（主角色可能不存在）'
+            }), 400
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 # === 章节管理 ===
 
 @app.route('/api/projects/<project_title>/chapters', methods=['GET'])
@@ -919,7 +1072,7 @@ def get_relationship_network(project_title):
 
 @app.route('/api/projects/<project_title>/analyze-chapter/<int:chapter_number>', methods=['POST'])
 def analyze_chapter_for_tracking(project_title, chapter_number):
-    """分析章节并自动更新角色追踪"""
+    """分析章节并自动更新角色追踪（同时检测新角色和别名）"""
     try:
         project = NovelProject.load(project_title)
         chapter = project.get_chapter(chapter_number)
@@ -931,13 +1084,37 @@ def analyze_chapter_for_tracking(project_title, chapter_number):
             return jsonify({'success': False, 'error': 'API密钥未配置'}), 400
         
         client = GrokClient()
+        
+        # 步骤1: 检测新角色
+        existing_char_names = [char.name for char in project.characters]
+        new_chars = client.analyze_new_characters(chapter, existing_char_names)
+        
+        new_character_names = []
+        if new_chars:
+            from novel_ai.core.project import Character
+            for char_data in new_chars:
+                character = Character(
+                    name=char_data['name'],
+                    description=char_data['description'],
+                    personality=char_data.get('personality', '')
+                )
+                project.add_character(character)
+                new_character_names.append(char_data['name'])
+            project.save()
+        
+        # 步骤2: 更新角色追踪（会自动识别别名）
         client.auto_update_character_tracker(project, chapter)
         
         project.save()
         
+        message = '章节分析完成，角色追踪已更新'
+        if new_character_names:
+            message += f'，发现新角色: {", ".join(new_character_names)}'
+        
         return jsonify({
             'success': True,
-            'message': '章节分析完成，角色追踪已更新'
+            'message': message,
+            'new_characters': new_character_names
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -1438,39 +1615,38 @@ def import_novel(project_title):
             # 直接添加到章节列表，保持章节号
             project.chapters.append(chapter)
         
-        # 提取角色和角色追踪（可选，在后台线程中执行）
-        characters_extracted = []
-        if extract_characters:
-            print(f"[导入小说] 开始提取角色和分析角色追踪...")
-            
-            def extract_chars_and_tracking_async():
-                try:
-                    client = GrokClient()
+        # 后台异步处理：角色提取（必须）+ 角色追踪（可选）
+        print(f"[导入小说] 开始后台处理...")
+        
+        def extract_chars_and_tracking_async():
+            try:
+                client = GrokClient()
+                
+                # 步骤1: 提取角色（总是执行）
+                print(f"[导入小说] 步骤1: 提取角色信息（必须）...")
+                chars = client.extract_characters_from_novel(novel_content)
+                
+                # 将提取的角色添加到项目
+                from novel_ai.core.project import Character
+                for char_data in chars:
+                    character = Character(
+                        name=char_data['name'],
+                        description=char_data['description'],
+                        personality=char_data['personality']
+                    )
+                    # 解析relationships字符串为字典（简单处理）
+                    if char_data.get('relationships'):
+                        # 暂时将关系存为一个通用描述
+                        character.relationships = {'其他': char_data['relationships']}
                     
-                    # 1. 提取角色
-                    print(f"[导入小说] 步骤1: 提取角色信息...")
-                    chars = client.extract_characters_from_novel(novel_content)
-                    
-                    # 将提取的角色添加到项目
-                    from novel_ai.core.project import Character
-                    for char_data in chars:
-                        character = Character(
-                            name=char_data['name'],
-                            description=char_data['description'],
-                            personality=char_data['personality']
-                        )
-                        # 解析relationships字符串为字典（简单处理）
-                        if char_data.get('relationships'):
-                            # 暂时将关系存为一个通用描述
-                            character.relationships = {'其他': char_data['relationships']}
-                        
-                        project.add_character(character)
-                    
-                    project.save()
-                    print(f"[导入小说] ✓ 成功提取并保存 {len(chars)} 个角色")
-                    
-                    # 2. 分析每个章节：检测新角色 + 角色追踪
-                    print(f"[导入小说] 步骤2: 逐章分析新角色和角色追踪...")
+                    project.add_character(character)
+                
+                project.save()
+                print(f"[导入小说] ✓ 成功提取并保存 {len(chars)} 个角色")
+                
+                # 步骤2: 逐章分析（根据用户选择）
+                if extract_characters:
+                    print(f"[导入小说] 步骤2: 逐章分析新角色和角色追踪（用户已选择）...")
                     for idx, chapter in enumerate(project.chapters):
                         if chapter.source == 'imported':
                             try:
@@ -1500,18 +1676,21 @@ def import_novel(project_title):
                                 print(f"[导入小说]   ⚠️ 第{chapter.chapter_number}章分析失败: {e}")
                     
                     print(f"[导入小说] ✓ 新角色检测和角色追踪分析完成！")
-                    print(f"[导入小说] 最终角色数: {len(project.characters)}")
-                    
-                except Exception as e:
-                    print(f"[导入小说] 角色提取/追踪失败: {e}")
-                    import traceback
-                    traceback.print_exc()
-            
-            # 启动后台线程
-            import threading
-            thread = threading.Thread(target=extract_chars_and_tracking_async)
-            thread.daemon = True
-            thread.start()
+                else:
+                    print(f"[导入小说] 步骤2: 跳过角色追踪分析（用户未选择）")
+                
+                print(f"[导入小说] 最终角色数: {len(project.characters)}")
+                
+            except Exception as e:
+                print(f"[导入小说] 后台处理失败: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        # 启动后台线程
+        import threading
+        thread = threading.Thread(target=extract_chars_and_tracking_async)
+        thread.daemon = True
+        thread.start()
         
         # 保存项目
         project.save()

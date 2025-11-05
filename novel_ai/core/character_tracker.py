@@ -422,6 +422,119 @@ class CharacterTracker:
         # 按时间排序
         return sorted(timeline, key=lambda x: (x.get('chapter', 0), x['timestamp']))
     
+    # ========== 角色合并 ==========
+    
+    def merge_character_data(self, source_name: str, target_name: str):
+        """
+        合并角色数据（将source_name的所有数据合并到target_name）
+        
+        Args:
+            source_name: 源角色名（要被合并的）
+            target_name: 目标角色名（保留的）
+        """
+        # 合并经历
+        if source_name in self.experiences:
+            if target_name not in self.experiences:
+                self.experiences[target_name] = []
+            self.experiences[target_name].extend(self.experiences[source_name])
+            # 按章节号排序
+            self.experiences[target_name].sort(key=lambda x: x.chapter_number)
+            del self.experiences[source_name]
+        
+        # 合并关系
+        if source_name in self.relationships:
+            if target_name not in self.relationships:
+                self.relationships[target_name] = []
+            
+            # 合并关系，避免重复
+            existing_targets = {rel.target_character for rel in self.relationships[target_name]}
+            for rel in self.relationships[source_name]:
+                if rel.target_character not in existing_targets:
+                    self.relationships[target_name].append(rel)
+            
+            del self.relationships[source_name]
+        
+        # 更新其他角色对此角色的关系引用
+        for char_name, rels in self.relationships.items():
+            for rel in rels:
+                if rel.target_character == source_name:
+                    rel.target_character = target_name
+        
+        # 更新经历中的相关角色引用
+        for char_name, exps in self.experiences.items():
+            for exp in exps:
+                if source_name in exp.related_characters:
+                    exp.related_characters.remove(source_name)
+                    if target_name not in exp.related_characters:
+                        exp.related_characters.append(target_name)
+        
+        # 合并性格特质
+        if source_name in self.personality_traits:
+            if target_name not in self.personality_traits:
+                self.personality_traits[target_name] = []
+            
+            # 合并特质，避免重复
+            existing_traits = {trait.trait_name for trait in self.personality_traits[target_name]}
+            for trait in self.personality_traits[source_name]:
+                if trait.trait_name not in existing_traits:
+                    self.personality_traits[target_name].append(trait)
+            
+            del self.personality_traits[source_name]
+        
+        # 合并性格演变
+        if source_name in self.personality_evolution:
+            if target_name not in self.personality_evolution:
+                self.personality_evolution[target_name] = []
+            self.personality_evolution[target_name].extend(self.personality_evolution[source_name])
+            # 按章节号排序
+            self.personality_evolution[target_name].sort(key=lambda x: x.chapter_number)
+            del self.personality_evolution[source_name]
+    
+    def rename_character(self, old_name: str, new_name: str):
+        """
+        重命名角色（在所有追踪数据中更新角色名）
+        
+        Args:
+            old_name: 旧名字
+            new_name: 新名字
+        """
+        # 这个方法与merge_character_data类似，但是简单的重命名
+        if old_name == new_name:
+            return
+        
+        # 重命名经历
+        if old_name in self.experiences:
+            self.experiences[new_name] = self.experiences[old_name]
+            del self.experiences[old_name]
+        
+        # 重命名关系
+        if old_name in self.relationships:
+            self.relationships[new_name] = self.relationships[old_name]
+            del self.relationships[old_name]
+        
+        # 更新关系引用
+        for char_name, rels in self.relationships.items():
+            for rel in rels:
+                if rel.target_character == old_name:
+                    rel.target_character = new_name
+        
+        # 更新经历中的相关角色引用
+        for char_name, exps in self.experiences.items():
+            for exp in exps:
+                if old_name in exp.related_characters:
+                    idx = exp.related_characters.index(old_name)
+                    exp.related_characters[idx] = new_name
+        
+        # 重命名性格特质
+        if old_name in self.personality_traits:
+            self.personality_traits[new_name] = self.personality_traits[old_name]
+            del self.personality_traits[old_name]
+        
+        # 重命名性格演变
+        if old_name in self.personality_evolution:
+            self.personality_evolution[new_name] = self.personality_evolution[old_name]
+            del self.personality_evolution[old_name]
+    
     # ========== 序列化 ==========
     
     def to_dict(self) -> dict:
