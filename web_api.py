@@ -123,6 +123,21 @@ def check_auth():
     })
 
 
+@app.route('/api/config', methods=['GET'])
+def get_config():
+    """获取前端功能配置"""
+    enable_outline = os.getenv('ENABLE_OUTLINE_MODE', 'True').lower() in ('true', '1', 'yes')
+    enable_import = os.getenv('ENABLE_IMPORT_NOVEL', 'True').lower() in ('true', '1', 'yes')
+    
+    return jsonify({
+        'success': True,
+        'config': {
+            'enable_outline_mode': enable_outline,
+            'enable_import_novel': enable_import
+        }
+    })
+
+
 @app.route('/')
 @login_required
 def index():
@@ -143,7 +158,7 @@ def reader():
 def check_login():
     """所有请求前检查登录状态（除了登录相关接口）"""
     # 白名单：不需要登录的路径
-    whitelist = ['/login', '/api/login', '/api/check-auth', '/static/']
+    whitelist = ['/login', '/api/login', '/api/check-auth', '/api/config', '/static/']
     
     # 检查是否在白名单中
     for path in whitelist:

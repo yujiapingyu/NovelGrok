@@ -6,15 +6,61 @@ let projects = [];
 let isGenerating = false; // 防止重复请求
 let generationPollingTimer = null; // 轮询定时器
 let currentCharacterTracking = null; // 当前查看的角色追踪数据
+let appConfig = {
+    enable_outline_mode: true,
+    enable_import_novel: true
+}; // 应用配置
 
 // API基础URL
 const API_BASE = '';
 
 // 页面加载时初始化
 document.addEventListener('DOMContentLoaded', () => {
+    loadConfig();
     loadProjects();
     checkAPIStatus();
 });
+
+// ========== 配置加载 ==========
+
+async function loadConfig() {
+    try {
+        const response = await fetch('/api/config');
+        const data = await response.json();
+        
+        if (data.success && data.config) {
+            appConfig = data.config;
+            
+            // 根据配置隐藏/显示功能按钮
+            applyConfigToUI();
+        }
+    } catch (error) {
+        console.error('加载配置失败:', error);
+    }
+}
+
+function applyConfigToUI() {
+    // 隐藏/显示导入小说按钮
+    const importBtn = document.querySelector('button[onclick="showImportNovelModal()"]');
+    if (importBtn) {
+        importBtn.style.display = appConfig.enable_import_novel ? 'inline-block' : 'none';
+    }
+    
+    // 隐藏/显示大纲模式相关按钮
+    if (!appConfig.enable_outline_mode) {
+        // 隐藏生成大纲按钮
+        const outlineBtn = document.getElementById('generateOutlineBtn');
+        if (outlineBtn) {
+            outlineBtn.style.display = 'none';
+        }
+        
+        // 隐藏大纲编辑按钮
+        const editOutlineBtn = document.getElementById('editOutlineBtn');
+        if (editOutlineBtn) {
+            editOutlineBtn.style.display = 'none';
+        }
+    }
+}
 
 // ========== 登录/登出 ==========
 
@@ -447,10 +493,19 @@ async function loadProjects() {
         
         projectList.innerHTML = projects.map(project => `
             <div class="project-item" onclick="selectProject('${project.title}')">
-                <h3>${project.title}</h3>
-                <div class="meta">
-                    ${project.genre || '未分类'} · ${project.chapter_count}章 · ${formatWordCount(project.total_words)}
+                <div style="flex: 1;">
+                    <h3>${project.title}</h3>
+                    <div class="meta">
+                        ${project.genre || '未分类'} · ${project.chapter_count}章 · ${formatWordCount(project.total_words)}
+                    </div>
                 </div>
+                <button 
+                    class="delete-project-btn" 
+                    onclick="event.stopPropagation(); deleteProject('${project.title.replace(/'/g, "\\'")}')"
+                    title="删除项目"
+                >
+                    🗑️
+                </button>
             </div>
         `).join('');
         
@@ -482,6 +537,9 @@ async function selectProject(title) {
         updateCharactersTab();
         updateChaptersTab();
         updateCharacterTrackingSelect();
+        
+        // 应用配置（隐藏/显示功能按钮）
+        applyConfigToUI();
         
     } catch (error) {
         showAlert('加载项目失败: ' + error.message, 'error');
@@ -520,6 +578,38 @@ async function createProject() {
         
     } catch (error) {
         alert('创建失败: ' + error.message);
+    }
+}
+
+async function deleteProject(title) {
+    if (!confirm(`确定要删除项目「${title}」吗？\n\n此操作不可恢复，将删除所有章节和角色数据！`)) {
+        return;
+    }
+    
+    // 二次确认
+    if (!confirm(`再次确认：真的要删除「${title}」吗？`)) {
+        return;
+    }
+    
+    try {
+        await apiCall(`/api/projects/${encodeURIComponent(title)}`, {
+            method: 'DELETE'
+        });
+        
+        showAlert('项目已删除', 'success');
+        
+        // 如果删除的是当前项目，清空显示
+        if (currentProject && currentProject.title === title) {
+            currentProject = null;
+            document.getElementById('emptyState').style.display = 'block';
+            document.getElementById('projectContent').style.display = 'none';
+        }
+        
+        // 重新加载项目列表
+        await loadProjects();
+        
+    } catch (error) {
+        showAlert('删除失败: ' + error.message, 'error');
     }
 }
 
