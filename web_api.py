@@ -25,11 +25,22 @@ load_dotenv()
 
 # 创建Flask应用
 app = Flask(__name__)
-CORS(app)  # 允许跨域请求
+
+# CORS 配置 - 支持公网访问
+CORS(app, supports_credentials=True, resources={
+    r"/api/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type"]
+    }
+})
 
 # 配置 session 密钥（从环境变量读取，如果没有则生成一个）
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', secrets.token_hex(32))
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)  # session 有效期24小时
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # 允许跨站 cookie
+use_https = os.getenv('WEB_USE_HTTPS', 'False').lower() in ('true', '1', 'yes')
+app.config['SESSION_COOKIE_SECURE'] = use_https  # 从环境变量读取
 
 # 密码配置（从环境变量读取）
 # 默认密码: novelgrok2024 （请在 .env 中修改）
@@ -1249,6 +1260,9 @@ def get_api_balance():
             'data': balance_info
         })
     except Exception as e:
+        import traceback
+        print(f"获取API余额失败: {e}")
+        traceback.print_exc()
         return jsonify({
             'success': False,
             'error': str(e)

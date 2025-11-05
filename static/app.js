@@ -361,6 +361,8 @@ async function apiCall(url, options = {}) {
 async function checkAPIStatus() {
     try {
         const result = await apiCall('/api/health');
+        if (!result) return; // 未登录，跳过
+        
         if (!result.data.api_configured) {
             console.warn('API密钥未配置，AI功能将不可用');
         }
@@ -369,13 +371,38 @@ async function checkAPIStatus() {
         loadAPIBalance();
     } catch (error) {
         console.error('健康检查失败:', error);
+        // 不显示错误，因为可能是未登录
     }
 }
 
 async function loadAPIBalance() {
     const balanceInfo = document.getElementById('balanceInfo');
+    if (!balanceInfo) return; // 如果元素不存在（比如在登录页），直接返回
+    
+    balanceInfo.innerHTML = '🔄 正在检查API状态...';
+    balanceInfo.style.color = '#95a5a6';
+    
     try {
-        const result = await apiCall('/api/balance');
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
+        
+        const response = await fetch('/api/balance', {
+            signal: controller.signal,
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        clearTimeout(timeoutId);
+        
+        if (response.status === 401) {
+            // 未登录，不显示错误
+            balanceInfo.innerHTML = '⚠️ 请登录后查看API状态';
+            balanceInfo.style.color = '#95a5a6';
+            return;
+        }
+        
+        const result = await response.json();
+        
         if (result.success && result.data) {
             const data = result.data;
             if (data.available) {
@@ -385,11 +412,20 @@ async function loadAPIBalance() {
                 balanceInfo.innerHTML = `❌ ${data.message}`;
                 balanceInfo.style.color = '#f44336';
             }
+        } else {
+            balanceInfo.innerHTML = `⚠️ ${result.error || '获取失败'}`;
+            balanceInfo.style.color = '#ff9800';
         }
     } catch (error) {
-        balanceInfo.innerHTML = `⚠️ 无法获取API状态`;
-        balanceInfo.style.color = '#ff9800';
-        console.error('获取余额失败:', error);
+        if (error.name === 'AbortError') {
+            balanceInfo.innerHTML = `⚠️ 请求超时，请检查网络连接`;
+            balanceInfo.style.color = '#ff9800';
+            console.error('API状态检查超时');
+        } else {
+            balanceInfo.innerHTML = `⚠️ 无法连接到服务器`;
+            balanceInfo.style.color = '#ff9800';
+            console.error('获取余额失败:', error);
+        }
     }
 }
 
