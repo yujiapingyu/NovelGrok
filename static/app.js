@@ -46,18 +46,35 @@ function applyConfigToUI() {
         importBtn.style.display = appConfig.enable_import_novel ? 'inline-block' : 'none';
     }
     
-    // 隐藏/显示大纲模式相关按钮
+    // 隐藏/显示大纲模式相关功能
     if (!appConfig.enable_outline_mode) {
-        // 隐藏生成大纲按钮
-        const outlineBtn = document.getElementById('generateOutlineBtn');
-        if (outlineBtn) {
-            outlineBtn.style.display = 'none';
+        // 隐藏大纲模式按钮（AI创作页面中的模式切换）
+        const outlineModeBtn = document.getElementById('outlineModeBtn');
+        if (outlineModeBtn) {
+            outlineModeBtn.style.display = 'none';
         }
         
-        // 隐藏大纲编辑按钮
-        const editOutlineBtn = document.getElementById('editOutlineBtn');
-        if (editOutlineBtn) {
-            editOutlineBtn.style.display = 'none';
+        // 如果当前是大纲模式，切换到直接生成模式
+        const directModeBtn = document.getElementById('directModeBtn');
+        if (directModeBtn && !directModeBtn.classList.contains('active')) {
+            directModeBtn.click();
+        }
+        
+        // 隐藏大纲内容区域
+        const outlineSection = document.getElementById('outlineSection');
+        if (outlineSection) {
+            outlineSection.style.display = 'none';
+        }
+    } else {
+        // 显示大纲模式相关功能
+        const outlineModeBtn = document.getElementById('outlineModeBtn');
+        if (outlineModeBtn) {
+            outlineModeBtn.style.display = 'inline-block';
+        }
+        
+        const outlineSection = document.getElementById('outlineSection');
+        if (outlineSection) {
+            outlineSection.style.display = 'block';
         }
     }
 }
@@ -492,8 +509,8 @@ async function loadProjects() {
         }
         
         projectList.innerHTML = projects.map(project => `
-            <div class="project-item" onclick="selectProject('${project.title}')">
-                <div style="flex: 1;">
+            <div class="project-item" data-project-title="${project.title.replace(/"/g, '&quot;')}">
+                <div style="flex: 1;" class="project-item-content">
                     <h3>${project.title}</h3>
                     <div class="meta">
                         ${project.genre || '未分类'} · ${project.chapter_count}章 · ${formatWordCount(project.total_words)}
@@ -501,13 +518,29 @@ async function loadProjects() {
                 </div>
                 <button 
                     class="delete-project-btn" 
-                    onclick="event.stopPropagation(); deleteProject('${project.title.replace(/'/g, "\\'")}')"
+                    data-project-title="${project.title.replace(/"/g, '&quot;')}"
                     title="删除项目"
                 >
                     🗑️
                 </button>
             </div>
         `).join('');
+        
+        // 添加事件委托
+        projectList.querySelectorAll('.project-item').forEach(item => {
+            const title = item.getAttribute('data-project-title');
+            
+            // 点击项目内容区域选择项目
+            const content = item.querySelector('.project-item-content');
+            content.addEventListener('click', () => selectProject(title));
+            
+            // 点击删除按钮删除项目
+            const deleteBtn = item.querySelector('.delete-project-btn');
+            deleteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                deleteProject(title);
+            });
+        });
         
     } catch (error) {
         document.getElementById('projectList').innerHTML = 
