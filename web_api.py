@@ -235,6 +235,7 @@ def get_project(project_title):
                 'plot_outline': project.plot_outline,
                 'writing_style': project.writing_style,
                 'target_audience': project.target_audience,
+                'style_guide': project.style_guide,
                 'characters': [char.to_dict() for char in project.characters],
                 'chapters': [chap.to_dict() for chap in project.chapters],
                 'plot_points': project.plot_points,
@@ -316,6 +317,8 @@ def update_project(project_title):
             project.writing_style = data['writing_style']
         if 'target_audience' in data:
             project.target_audience = data['target_audience']
+        if 'style_guide' in data:
+            project.style_guide = data['style_guide']
         
         project.save()
         
@@ -1372,6 +1375,115 @@ def generate_outline(project_title):
         }), 500
 
 
+@app.route('/api/projects/<project_title>/regenerate-outline-with-feedback', methods=['POST'])
+def regenerate_outline_with_feedback(project_title):
+    """根据用户反馈重新生成完整大纲（仅在没有生成章节时可用）"""
+    try:
+        data = request.json
+        user_feedback = data.get('user_feedback', '').strip()
+        total_chapters = data.get('total_chapters')
+        avg_length = data.get('avg_chapter_length', 3000)
+        
+        if not user_feedback:
+            return jsonify({
+                'success': False,
+                'error': '请输入修改意见'
+            }), 400
+        
+        project = NovelProject.load(project_title)
+        
+        # 检查是否有已生成的章节
+        if project.chapters and len(project.chapters) > 0:
+            return jsonify({
+                'success': False,
+                'error': '项目中已有生成的章节，无法重新生成大纲。如需修改大纲，请先删除所有章节。'
+            }), 400
+        
+        # 检查是否有旧大纲
+        if not project.chapter_outlines or len(project.chapter_outlines) == 0:
+            return jsonify({
+                'success': False,
+                'error': '项目中没有大纲，请先生成初始大纲'
+            }), 400
+        
+        # 保存旧大纲数据
+        old_outlines = [o.to_dict() for o in project.chapter_outlines]
+        old_chapter_count = len(old_outlines)
+        
+        # 如果没有指定章节数，使用旧大纲的章节数
+        if not total_chapters:
+            total_chapters = old_chapter_count
+        
+        print(f"[大纲重新生成] 项目 '{project_title}' - 根据用户反馈重新生成")
+        print(f"[大纲重新生成] 用户意见：{user_feedback}")
+        print(f"[大纲重新生成] 旧大纲：{old_chapter_count}章 -> 新大纲：{total_chapters}章")
+        
+        client = GrokClient()
+        
+        import time
+        start_time = time.time()
+        
+        # 调用新方法：根据反馈重新生成
+        outlines_data = client.regenerate_full_outline_with_feedback(
+            project=project,
+            user_feedback=user_feedback,
+            old_outlines=old_outlines,
+            total_chapters=total_chapters,
+            avg_chapter_length=avg_length
+        )
+        
+        if not outlines_data:
+            return jsonify({
+                'success': False,
+                'error': '大纲生成失败，请重试'
+            }), 500
+        
+        # 清空旧大纲
+        project.chapter_outlines = []
+        
+        # 保存新大纲
+        from novel_ai.core.project import ChapterOutline
+        for outline_data in outlines_data:
+            outline = ChapterOutline(
+                chapter_number=outline_data['chapter_number'],
+                title=outline_data['title'],
+                summary=outline_data['summary'],
+                key_events=outline_data.get('key_events', []),
+                involved_characters=outline_data.get('involved_characters', []),
+                target_length=outline_data.get('target_length', avg_length),
+                notes=outline_data.get('notes', '')
+            )
+            project.add_chapter_outline(outline)
+        
+        project.save()
+        
+        elapsed = time.time() - start_time
+        print(f"[大纲重新生成] 完成！生成 {len(outlines_data)} 章，耗时 {elapsed:.1f} 秒")
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'message': f'根据您的意见成功重新生成{len(outlines_data)}章大纲',
+                'outlines': [o.to_dict() for o in project.chapter_outlines],
+                'elapsed_time': f'{elapsed:.1f}秒'
+            }
+        })
+        
+    except FileNotFoundError:
+        return jsonify({
+            'success': False,
+            'error': f'项目不存在: {project_title}'
+        }), 404
+    except Exception as e:
+        print(f"[大纲重新生成] 错误: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.route('/api/projects/<project_title>/outlines', methods=['GET', 'POST'])
 def manage_outlines(project_title):
     """获取或更新章节大纲列表"""
@@ -1438,6 +1550,9 @@ def manage_outlines(project_title):
 def generate_from_outline(project_title, chapter_number):
     """根据大纲生成章节"""
     try:
+        data = request.json or {}
+        enable_character_tracking = data.get('enable_character_tracking', False)
+        
         project = NovelProject.load(project_title)
         outline = project.get_chapter_outline(chapter_number)
         
@@ -1475,13 +1590,16 @@ def generate_from_outline(project_title, chapter_number):
                 except Exception as e:
                     print(f"⚠ 新角色检测失败（不影响章节生成）: {e}")
                 
-                # 自动分析并更新角色追踪
-                try:
-                    if len(project.characters) > 0:
-                        client.auto_update_character_tracker(project, chapter)
-                        print(f"✓ 章节 {chapter.chapter_number} 的角色追踪已自动更新")
-                except Exception as e:
-                    print(f"⚠ 角色追踪分析失败（不影响章节生成）: {e}")
+                # 根据用户选择决定是否启用角色追踪
+                if enable_character_tracking:
+                    try:
+                        if len(project.characters) > 0:
+                            client.auto_update_character_tracker(project, chapter)
+                            print(f"✓ 章节 {chapter.chapter_number} 的角色追踪已自动更新")
+                    except Exception as e:
+                        print(f"⚠ 角色追踪分析失败（不影响章节生成）: {e}")
+                else:
+                    print(f"ℹ️ 用户选择不启用角色追踪")
                 
                 # 更新大纲状态
                 project.update_chapter_outline(chapter_number, status='generated')
@@ -1528,6 +1646,7 @@ def batch_generate_from_outline(project_title):
         data = request.json
         start_chapter = data.get('start_chapter', 1)
         end_chapter = data.get('end_chapter')
+        enable_character_tracking = data.get('enable_character_tracking', False)
         
         project = NovelProject.load(project_title)
         
@@ -1558,7 +1677,8 @@ def batch_generate_from_outline(project_title):
             }), 400
         
         total_count = len(outlines_to_generate)
-        print(f"[批量生成] 开始批量生成 {total_count} 个章节（第{start_chapter}-{end_chapter}章）")
+        tracking_status = "启用" if enable_character_tracking else "关闭"
+        print(f"[批量生成] 开始批量生成 {total_count} 个章节（第{start_chapter}-{end_chapter}章），角色追踪：{tracking_status}")
         
         # 初始化批量生成状态
         batch_status_key = f"{project_title}_batch"
@@ -1576,7 +1696,7 @@ def batch_generate_from_outline(project_title):
         import threading
         thread = threading.Thread(
             target=batch_generate_background,
-            args=(project_title, outlines_to_generate, batch_status_key)
+            args=(project_title, outlines_to_generate, batch_status_key, enable_character_tracking)
         )
         thread.daemon = True
         thread.start()
@@ -1642,7 +1762,7 @@ def batch_generate_cancel(project_title):
         }), 500
 
 
-def batch_generate_background(project_title, outlines_to_generate, batch_status_key):
+def batch_generate_background(project_title, outlines_to_generate, batch_status_key, enable_character_tracking=False):
     """后台批量生成章节"""
     try:
         project = NovelProject.load(project_title)
@@ -1689,13 +1809,16 @@ def batch_generate_background(project_title, outlines_to_generate, batch_status_
                 except Exception as e:
                     print(f"⚠ 新角色检测失败: {e}")
                 
-                # 自动更新角色追踪
-                try:
-                    if len(project.characters) > 0:
-                        client.auto_update_character_tracker(project, chapter)
-                        print(f"✓ 第{chapter_number}章角色追踪已更新")
-                except Exception as e:
-                    print(f"⚠ 角色追踪更新失败: {e}")
+                # 根据用户选择决定是否启用角色追踪
+                if enable_character_tracking:
+                    try:
+                        if len(project.characters) > 0:
+                            client.auto_update_character_tracker(project, chapter)
+                            print(f"✓ 第{chapter_number}章角色追踪已更新")
+                    except Exception as e:
+                        print(f"⚠ 角色追踪更新失败: {e}")
+                else:
+                    print(f"ℹ️ 第{chapter_number}章跳过角色追踪（用户选择关闭）")
                 
                 # 更新大纲状态
                 project.update_chapter_outline(chapter_number, status='generated')

@@ -687,7 +687,7 @@ function showEditProjectModal() {
     document.getElementById('editProjectGenre').value = currentProject.genre || '';
     document.getElementById('editProjectBackground').value = currentProject.background || '';
     document.getElementById('editProjectOutline').value = currentProject.plot_outline || '';
-    document.getElementById('editProjectStyle').value = currentProject.writing_style || '';
+    document.getElementById('editProjectStyleGuide').value = currentProject.style_guide || '';
     
     showModal('editProjectModal');
 }
@@ -699,7 +699,7 @@ async function updateProject() {
         genre: document.getElementById('editProjectGenre').value.trim(),
         background: document.getElementById('editProjectBackground').value.trim(),
         plot_outline: document.getElementById('editProjectOutline').value.trim(),
-        writing_style: document.getElementById('editProjectStyle').value.trim()
+        style_guide: document.getElementById('editProjectStyleGuide').value.trim()
     };
     
     try {
@@ -2390,7 +2390,28 @@ function displayOutlines() {
         return;
     }
     
-    container.innerHTML = currentOutlines.map(outline => {
+    // 检查是否有已生成的章节
+    const hasGeneratedChapters = currentProject && currentProject.chapters && currentProject.chapters.length > 0;
+    
+    // 在大纲列表顶部显示重新生成按钮（仅当没有生成章节时）
+    let headerHtml = '';
+    if (!hasGeneratedChapters) {
+        headerHtml = `
+            <div class="card" style="background: linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 100%); border: none; margin-bottom: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <h4 style="color: #2d3436; margin: 0 0 5px 0;">💡 对大纲不满意？</h4>
+                        <p style="color: #2d3436; margin: 0; font-size: 14px;">输入您的意见，AI 将根据反馈重新生成优化后的大纲</p>
+                    </div>
+                    <button class="btn" onclick="showRegenerateOutlineWithFeedbackDialog()" style="background: #2d3436; color: white; white-space: nowrap;">
+                        🔄 重新生成大纲
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+    
+    container.innerHTML = headerHtml + currentOutlines.map(outline => {
         const statusClass = `status-${outline.status}`;
         const statusText = outline.status === 'completed' ? '已完成' : 
                           outline.status === 'generated' ? '已生成' : '待生成';
@@ -2564,6 +2585,110 @@ async function generateFullOutline(totalChapters = 30, avgLength = 3000, storyGo
     }
 }
 
+// 显示"根据反馈重新生成大纲"对话框
+function showRegenerateOutlineWithFeedbackDialog() {
+    if (!currentProject) {
+        showAlert('请先选择项目', 'warning');
+        return;
+    }
+    
+    if (!currentOutlines || currentOutlines.length === 0) {
+        showAlert('请先生成初始大纲', 'warning');
+        return;
+    }
+    
+    // 检查是否有已生成的章节
+    if (currentProject.chapters && currentProject.chapters.length > 0) {
+        showAlert('项目中已有生成的章节，无法重新生成大纲。如需修改大纲，请先删除所有章节。', 'warning');
+        return;
+    }
+    
+    // 设置默认值
+    document.getElementById('regenerateOutlineFeedback').value = '';
+    document.getElementById('regenerateTotalChapters').value = currentOutlines.length;
+    document.getElementById('regenerateAvgLength').value = currentOutlines[0]?.target_length || 3000;
+    
+    showModal('regenerateOutlineWithFeedbackModal');
+}
+
+// 确认根据反馈重新生成大纲
+async function confirmRegenerateOutlineWithFeedback() {
+    const feedback = document.getElementById('regenerateOutlineFeedback').value.trim();
+    const totalChapters = parseInt(document.getElementById('regenerateTotalChapters').value);
+    const avgLength = parseInt(document.getElementById('regenerateAvgLength').value);
+    
+    if (!feedback) {
+        showAlert('请输入您的修改意见', 'warning');
+        return;
+    }
+    
+    if (totalChapters < 1 || totalChapters > 100) {
+        showAlert('章节数量必须在1-100之间', 'warning');
+        return;
+    }
+    
+    if (avgLength < 1000 || avgLength > 10000) {
+        showAlert('章节字数必须在1000-10000之间', 'warning');
+        return;
+    }
+    
+    // 二次确认
+    if (!confirm(`确定要根据您的意见重新生成大纲吗？\n\n这将替换当前的 ${currentOutlines.length} 章大纲。`)) {
+        return;
+    }
+    
+    closeModal('regenerateOutlineWithFeedbackModal');
+    
+    await regenerateOutlineWithFeedback(feedback, totalChapters, avgLength);
+}
+
+// 根据用户反馈重新生成大纲
+async function regenerateOutlineWithFeedback(feedback, totalChapters, avgLength) {
+    if (!currentProject) {
+        showAlert('请先选择项目', 'warning');
+        return;
+    }
+    
+    // 显示加载状态
+    const statusDiv = document.getElementById('outlineStatus');
+    const originalContent = statusDiv.innerHTML;
+    statusDiv.innerHTML = `
+        <div style="text-align: center; padding: 40px;">
+            <div class="spinner" style="margin: 0 auto 20px;"></div>
+            <p style="color: #667eea; font-size: 16px; font-weight: 500;">🤖 AI 正在根据您的意见优化大纲...</p>
+            <p style="color: #999; font-size: 14px; margin-top: 10px;">正在重新生成 ${totalChapters} 章大纲</p>
+            <div style="margin-top: 15px; padding: 15px; background: #f0f4ff; border-radius: 8px; text-align: left;">
+                <div style="font-size: 12px; color: #667eea; font-weight: 600; margin-bottom: 5px;">📝 您的意见：</div>
+                <div style="font-size: 13px; color: #666;">${feedback}</div>
+            </div>
+        </div>
+    `;
+    
+    try {
+        const result = await apiCall(`/api/projects/${encodeURIComponent(currentProject.title)}/regenerate-outline-with-feedback`, {
+            method: 'POST',
+            body: JSON.stringify({
+                user_feedback: feedback,
+                total_chapters: totalChapters,
+                avg_chapter_length: avgLength
+            })
+        });
+        
+        showAlert(`✨ 大纲已根据您的意见重新生成！共 ${result.data.outlines.length} 章`, 'success');
+        
+        // 重新加载项目数据
+        await selectProject(currentProject.title);
+        
+        // 加载并显示新大纲
+        await loadOutlines();
+        
+    } catch (error) {
+        console.error('重新生成大纲错误:', error);
+        statusDiv.innerHTML = originalContent;
+        showAlert('重新生成大纲失败: ' + error.message, 'error');
+    }
+}
+
 async function generateFromOutline(chapterNumber) {
     if (!currentProject) return;
     
@@ -2595,12 +2720,107 @@ async function generateFromOutline(chapterNumber) {
         }
     }
     
-    if (!confirm(`确定要根据大纲生成第${chapterNumber}章吗？\n\n标题：${outline.title}\n目标字数：${outline.target_length}\n\n生成时间约1-3分钟`)) {
-        return;
+    // 显示生成配置对话框
+    showGenerateFromOutlineDialog(chapterNumber, outline);
+}
+
+// 显示单章生成配置对话框
+function showGenerateFromOutlineDialog(chapterNumber, outline) {
+    const modalHTML = `
+        <div class="modal" id="generateOutlineChapterModal">
+            <div class="modal-content" style="max-width: 500px;">
+                <div class="modal-header">
+                    <h2>🚀 生成第${chapterNumber}章</h2>
+                </div>
+                
+                <div style="background: #f0f4ff; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <h4 style="margin: 0 0 10px 0; color: #667eea;">${outline.title}</h4>
+                    <div style="color: #666; font-size: 14px; line-height: 1.6;">
+                        <div>📝 目标字数：${outline.target_length} 字</div>
+                        <div>⏱️ 预计时间：1-3 分钟</div>
+                    </div>
+                </div>
+                
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <div id="trackingToggleArea" style="display: flex; align-items: center; gap: 10px; padding: 12px; background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; cursor: pointer;">
+                        <label class="toggle-switch" style="margin: 0;">
+                            <input type="checkbox" id="enableCharacterTracking">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <div style="flex: 1;">
+                            <div style="font-weight: 500; margin-bottom: 4px;">启用角色追踪</div>
+                            <small style="color: #666;">自动分析和更新角色经历、关系变化（会增加生成时间）</small>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" id="cancelGenerateOutlineBtn">取消</button>
+                    <button class="btn" id="confirmGenerateOutlineBtn">🚀 开始生成</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // 移除旧的对话框
+    const oldModal = document.getElementById('generateOutlineChapterModal');
+    if (oldModal) oldModal.remove();
+    
+    // 添加新对话框
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    
+    const modal = document.getElementById('generateOutlineChapterModal');
+    
+    // 添加事件监听器
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            closeGenerateOutlineChapterModal();
+        }
+    });
+    
+    // 取消按钮
+    document.getElementById('cancelGenerateOutlineBtn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeGenerateOutlineChapterModal();
+    });
+    
+    // 确认按钮
+    document.getElementById('confirmGenerateOutlineBtn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        confirmGenerateFromOutline(chapterNumber);
+    });
+    
+    // Toggle区域点击事件
+    document.getElementById('trackingToggleArea').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const checkbox = document.getElementById('enableCharacterTracking');
+        if (e.target !== checkbox && e.target.tagName !== 'SPAN') {
+            checkbox.checked = !checkbox.checked;
+        }
+    });
+    
+    modal.classList.add('active');
+}
+
+// 关闭单章生成对话框
+function closeGenerateOutlineChapterModal() {
+    const modal = document.getElementById('generateOutlineChapterModal');
+    if (modal) {
+        modal.classList.remove('active');
+        setTimeout(() => modal.remove(), 300);
     }
+}
+
+// 确认生成单章
+async function confirmGenerateFromOutline(chapterNumber) {
+    const enableTracking = document.getElementById('enableCharacterTracking').checked;
+    
+    closeGenerateOutlineChapterModal();
     
     try {
         isGenerating = true;
+        
+        const outline = currentOutlines.find(o => o.chapter_number === chapterNumber);
         
         // 创建进度提示模态框
         const progressModal = createProgressModal(
@@ -2616,7 +2836,10 @@ async function generateFromOutline(chapterNumber) {
         apiCall(
             `/api/projects/${encodeURIComponent(currentProject.title)}/generate-from-outline/${chapterNumber}`,
             {
-                method: 'POST'
+                method: 'POST',
+                body: JSON.stringify({
+                    enable_character_tracking: enableTracking
+                })
             }
         ).catch(error => {
             stopGenerationPolling();
@@ -2920,11 +3143,13 @@ function showBatchGenerateDialog() {
     const minChapter = Math.min(...ungeneratedOutlines.map(o => o.chapter_number));
     const maxChapter = Math.max(...ungeneratedOutlines.map(o => o.chapter_number));
     
-    // 创建对话框
+    // 创建对话框（使用与其他模态框相同的结构）
     const modalHTML = `
-        <div class="modal-overlay" id="batchGenerateModal" onclick="if(event.target === this) closeModal('batchGenerateModal')">
+        <div class="modal" id="batchGenerateModal">
             <div class="modal-content" style="max-width: 500px;">
-                <h3 style="margin-bottom: 20px;">🚀 批量生成章节</h3>
+                <div class="modal-header">
+                    <h2>🚀 批量生成章节</h2>
+                </div>
                 
                 <div class="form-group">
                     <label>起始章节</label>
@@ -2936,19 +3161,32 @@ function showBatchGenerateDialog() {
                     <input type="number" id="batchEndChapter" min="${minChapter}" max="${maxChapter}" value="${maxChapter}">
                 </div>
                 
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <div id="batchTrackingToggleArea" style="display: flex; align-items: center; gap: 10px; padding: 12px; background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; cursor: pointer;">
+                        <label class="toggle-switch" style="margin: 0;">
+                            <input type="checkbox" id="batchEnableCharacterTracking">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <div style="flex: 1;">
+                            <div style="font-weight: 500; margin-bottom: 4px;">启用角色追踪</div>
+                            <small style="color: #666;">每章生成后自动分析角色经历和关系变化（会增加总时间）</small>
+                        </div>
+                    </div>
+                </div>
+                
                 <div style="background: #f0f4ff; padding: 15px; border-radius: 8px; margin: 20px 0;">
                     <h4 style="margin: 0 0 10px 0; color: #667eea;">📋 批量生成说明</h4>
                     <ul style="margin: 0; padding-left: 20px; color: #666; font-size: 14px;">
                         <li>系统将按顺序生成所选范围内的所有章节</li>
                         <li>已生成的章节会自动跳过</li>
                         <li>生成过程中可以随时取消</li>
-                        <li>每章生成时会自动更新角色追踪</li>
+                        <li>建议章节较多时不启用角色追踪以节省时间</li>
                     </ul>
                 </div>
                 
-                <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
-                    <button class="btn btn-secondary" onclick="closeModal('batchGenerateModal')">取消</button>
-                    <button class="btn" onclick="startBatchGenerate()">🚀 开始生成</button>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" id="cancelBatchGenerateBtn">取消</button>
+                    <button class="btn" id="confirmBatchGenerateBtn">🚀 开始生成</button>
                 </div>
             </div>
         </div>
@@ -2960,13 +3198,54 @@ function showBatchGenerateDialog() {
     
     // 添加新对话框
     document.body.insertAdjacentHTML('beforeend', modalHTML);
-    document.getElementById('batchGenerateModal').style.display = 'flex';
+    
+    const modal = document.getElementById('batchGenerateModal');
+    
+    // 添加事件监听器
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            closeBatchGenerateModal();
+        }
+    });
+    
+    // 取消按钮
+    document.getElementById('cancelBatchGenerateBtn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeBatchGenerateModal();
+    });
+    
+    // 确认按钮
+    document.getElementById('confirmBatchGenerateBtn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        startBatchGenerate();
+    });
+    
+    // Toggle区域点击事件
+    document.getElementById('batchTrackingToggleArea').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const checkbox = document.getElementById('batchEnableCharacterTracking');
+        if (e.target !== checkbox && e.target.tagName !== 'SPAN') {
+            checkbox.checked = !checkbox.checked;
+        }
+    });
+    
+    modal.classList.add('active');
+}
+
+// 关闭批量生成对话框
+function closeBatchGenerateModal() {
+    const modal = document.getElementById('batchGenerateModal');
+    if (modal) {
+        modal.classList.remove('active');
+        setTimeout(() => modal.remove(), 300); // 等待动画结束后移除
+    }
 }
 
 // 开始批量生成
 async function startBatchGenerate() {
     const startChapter = parseInt(document.getElementById('batchStartChapter').value);
     const endChapter = parseInt(document.getElementById('batchEndChapter').value);
+    const enableTracking = document.getElementById('batchEnableCharacterTracking').checked;
     
     if (startChapter > endChapter) {
         showAlert('起始章节不能大于结束章节', 'warning');
@@ -2974,7 +3253,7 @@ async function startBatchGenerate() {
     }
     
     // 关闭对话框
-    closeModal('batchGenerateModal');
+    closeBatchGenerateModal();
     
     // 显示进度条
     document.getElementById('batchGenerateBar').style.display = 'none';
@@ -2986,7 +3265,8 @@ async function startBatchGenerate() {
             method: 'POST',
             body: JSON.stringify({
                 start_chapter: startChapter,
-                end_chapter: endChapter
+                end_chapter: endChapter,
+                enable_character_tracking: enableTracking
             })
         });
         

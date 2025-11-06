@@ -1098,7 +1098,12 @@ class GrokClient:
         elif project.story_goal:
             goal_section = f"\n故事目标：{project.story_goal}"
         
-        user_prompt = f"""请为以下小说构建完整的章节大纲。
+        # 计算三幕剧的章节分布
+        act1_end = max(3, int(total_chapters * 0.25))  # 第一幕：前25%
+        act2_end = max(act1_end + 5, int(total_chapters * 0.75))  # 第二幕：25%-75%
+        midpoint = int(total_chapters * 0.5)  # 中点
+        
+        user_prompt = f"""请为以下小说构建完整的章节大纲。你需要创造一个引人入胜、充满悬念、情节不重复的故事。
 
 【小说信息】
 标题：{project.title}
@@ -1110,54 +1115,148 @@ class GrokClient:
 【主要角色】
 {character_info if character_info else '暂无角色'}
 
-【大纲要求】
-1. 总章节数：{total_chapters}章
-2. 平均字数：每章约{avg_chapter_length}字
-3. 情节结构：起承转合，节奏合理
-4. 角色发展：主要角色有完整的成长弧线
-5. 冲突设计：层层递进，高潮迭起
+【总体要求】
+- 总章节数：{total_chapters}章
+- 每章约{avg_chapter_length}字
+- 遵循三幕剧结构，节奏分明
+- 每章都要有新的进展，绝不重复内容
+- 设置悬念和伏笔，让读者欲罢不能
 
-【大纲设计原则】
-1. **开篇（1-3章）**：引入主角，建立世界观，埋下主线冲突
-2. **发展（4-10章）**：角色关系建立，支线展开，小冲突不断
-3. **高潮前（11-20章）**：矛盾激化，转折点出现，危机逼近
-4. **高潮（21-{total_chapters-3}章）**：主要冲突爆发，情节密集
-5. **结局（最后3章）**：收束线索，解决矛盾，留有余韵{f"，最终达到：{story_goal or project.story_goal}" if (story_goal or project.story_goal) else ""}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【三幕剧结构设计】（请严格遵循）
 
+🎬 **第一幕：设定与冲突（第1-{act1_end}章）**
+目标：建立世界，介绍角色，引出主要冲突
+
+第1章：开场钩子
+  - 用强烈的场景或事件吸引读者
+  - 展示主角的日常生活或初始状态
+  - 埋下第一个悬念或疑问
+
+第2-{act1_end-1}章：建立世界
+  - 逐步展现世界观和规则
+  - 介绍主要角色及其关系
+  - 铺垫主线冲突的根源
+  - 至少埋下2-3个伏笔
+
+第{act1_end}章：进入第二幕的转折点
+  - 重大事件发生，主角被迫行动
+  - 主角做出关键决定，踏上旅程
+  - 故事从"准备"转向"行动"
+
+🎬 **第二幕：对抗与升级（第{act1_end+1}-{act2_end}章）**
+目标：矛盾激化，多次挫折，角色成长
+
+第{act1_end+1}-{midpoint-1}章：初次尝试与挫折
+  - 主角采取行动，但遇到困难
+  - 引入新的支线和次要角色
+  - 揭示部分真相，但产生更多疑问
+  - 小胜利与小失败交替，制造张力
+
+第{midpoint}章：中点转折（超级重要！）
+  - 重大真相揭露或假胜利/假失败
+  - 故事走向发生根本性变化
+  - 主角的目标或动机改变
+  - 赌注升级，风险加倍
+
+第{midpoint+1}-{act2_end-1}章：黑暗时刻与最低点
+  - 情况急转直下，主角陷入困境
+  - 内外双重压力（外部冲突+内心挣扎）
+  - 同伴背叛或分离、秘密曝光等
+  - 至少回收1-2个前面的伏笔
+
+第{act2_end}章：第二幕结束的低谷
+  - 主角最绝望的时刻
+  - 似乎一切都失败了
+  - 但萌生新的觉悟或获得关键信息
+  - 为最终决战做准备
+
+🎬 **第三幕：高潮与结局（第{act2_end+1}-{total_chapters}章）**
+目标：决战、真相大白、完成角色弧光
+
+第{act2_end+1}-{total_chapters-2}章：最终对决
+  - 主角集结力量，发起反击
+  - 激烈的高潮场景
+  - 反派最后的挣扎或反转
+  - 回收所有重要伏笔
+
+第{total_chapters-1}章：尾声前奏
+  - 主要冲突解决
+  - 次要线索收束
+  - 展示角色的成长和变化
+
+第{total_chapters}章：结局
+  - 新的平衡状态
+  - 角色的最终归宿{f"，达成：{story_goal or project.story_goal}" if (story_goal or project.story_goal) else ""}
+  - 可留白或开放式结局
+  - 呼应开篇，形成完整闭环
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【核心创作原则】（必须遵守！）
+
+✅ **悬念设计**
+- 每章结尾留下钩子（疑问、危机、转折）
+- 设置至少3-5个贯穿全文的悬念线
+- 分层揭示真相，不要一次说完
+- 用"为什么"、"接下来呢"驱动阅读
+
+✅ **伏笔与回收**
+- 前{act1_end}章至少埋下5个伏笔
+- 第{midpoint}章前后回收2-3个
+- 高潮章节回收剩余所有伏笔
+- 伏笔要自然，不刻意
+
+✅ **避免重复**
+- 每章必须推进主线或支线
+- 不要重复相同类型的场景（如：不要3次约会场景、不要2次类似的打斗）
+- 不要让角色反复讨论同一个问题
+- 每章的"关键事件"必须是全新的内容
+
+✅ **节奏控制**
+- 紧张（冲突、危机）与舒缓（日常、情感）交替
+- 每3-5章安排一个小高潮
+- 中点和结尾是大高潮
+- 避免连续多章平淡无奇
+
+✅ **角色成长**
+- 主角要有明确的成长弧线（从A状态到B状态）
+- 配角也要有变化，不能只是工具人
+- 通过冲突和选择展现角色性格
+- 关系要发展（从陌生到熟悉、从信任到背叛等）
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 【输出格式】
-请严格按照以下JSON格式输出章节大纲：
+请严格按照以下JSON格式输出{total_chapters}章大纲：
 
 ```json
 [
   {{
     "chapter_number": 1,
-    "title": "章节标题（简洁有力）",
-    "summary": "章节概要，描述主要情节走向（80-150字）",
+    "title": "引人入胜的标题",
+    "summary": "详细概要（100-150字），包含：主要场景、核心事件、角色状态、情感走向、章末悬念",
     "key_events": [
-      "关键事件1：具体描述",
-      "关键事件2：具体描述",
-      "关键事件3：具体描述"
+      "事件1：具体行动+结果",
+      "事件2：对话或冲突+影响",
+      "事件3：转折或发现+后续影响",
+      "事件4（可选）：伏笔或铺垫"
     ],
-    "involved_characters": ["角色1", "角色2", "角色3"],
+    "involved_characters": ["角色1", "角色2"],
     "target_length": {avg_chapter_length},
-    "notes": "创作要点提示（可选）"
-  }},
-  {{
-    "chapter_number": 2,
-    ...
+    "notes": "【悬念】本章留下什么疑问？【伏笔】埋下什么线索？【情绪】主基调是什么？"
   }}
 ]
 ```
 
-⚠️ 关键要求：
-1. 每个章节的summary要具体，不要笼统
-2. key_events要详细，至少3-5个
-3. 确保情节连贯，前后呼应
-4. 合理分配角色出场
-5. JSON格式必须完全正确
-6. 生成完整的{total_chapters}章大纲
+⚠️ **严格检查清单**
+1. ✅ 是否遵循三幕剧结构？
+2. ✅ 每章是否都有新内容，没有重复？
+3. ✅ 是否设置了足够的悬念和钩子？
+4. ✅ 伏笔是否合理分布并在后文回收？
+5. ✅ 节奏是否张弛有度？
+6. ✅ 角色是否有成长变化？
+7. ✅ JSON格式是否完全正确？
 
-现在请开始生成大纲："""
+现在请深呼吸，认真思考故事结构，然后生成一个精彩的{total_chapters}章大纲："""
         
         messages = [
             {"role": "system", "content": system_prompt},
@@ -1165,7 +1264,14 @@ class GrokClient:
         ]
         
         try:
-            response = self._make_request(messages, temperature=0.7, max_tokens=8000)
+            # 根据章节数动态调整max_tokens
+            # 每章大约需要200-300 tokens，预留一些空间
+            estimated_tokens = total_chapters * 300 + 1000
+            max_tokens_needed = min(estimated_tokens, 16000)  # 最多16k tokens
+            
+            print(f"📝 开始生成{total_chapters}章大纲（预计需要{estimated_tokens} tokens）")
+            
+            response = self._make_request(messages, temperature=0.7, max_tokens=max_tokens_needed)
             
             # 提取JSON
             if "```json" in response:
@@ -1176,11 +1282,154 @@ class GrokClient:
             import json
             outlines = json.loads(response)
             
+            # 验证大纲质量
+            if len(outlines) != total_chapters:
+                print(f"⚠️ 警告：生成了{len(outlines)}章，预期{total_chapters}章")
+            
             print(f"✅ 成功生成{len(outlines)}章大纲")
             return outlines
             
         except Exception as e:
             print(f"❌ 大纲生成失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+    
+    def regenerate_full_outline_with_feedback(
+        self,
+        project: NovelProject,
+        user_feedback: str,
+        old_outlines: List[Dict],
+        total_chapters: int = 30,
+        avg_chapter_length: int = 3000
+    ) -> List[Dict]:
+        """
+        根据用户反馈重新生成完整大纲
+        
+        Args:
+            project: 小说项目
+            user_feedback: 用户的修改意见
+            old_outlines: 上一次生成的大纲
+            total_chapters: 总章节数
+            avg_chapter_length: 平均章节字数
+        
+        Returns:
+            新的章节大纲列表
+        """
+        system_prompt = "你是一位资深小说编剧，擅长根据反馈意见优化和重构故事大纲。" + self.common_prompt
+        
+        character_info = "\n".join([
+            f"- {char.name}: {char.description}" 
+            for char in project.characters
+        ])
+        
+        # 构建旧大纲摘要
+        old_outline_summary = "\n".join([
+            f"第{o.get('chapter_number', i+1)}章：{o.get('title', '未命名')}\n  概要：{o.get('summary', '')[:100]}"
+            for i, o in enumerate(old_outlines[:10])  # 只展示前10章避免太长
+        ])
+        
+        if len(old_outlines) > 10:
+            old_outline_summary += f"\n...（共{len(old_outlines)}章，此处省略后续章节）"
+        
+        # 计算三幕剧的章节分布
+        act1_end = max(3, int(total_chapters * 0.25))
+        act2_end = max(act1_end + 5, int(total_chapters * 0.75))
+        midpoint = int(total_chapters * 0.5)
+        
+        user_prompt = f"""请根据用户的修改意见，重新生成小说的完整章节大纲。
+
+【小说信息】
+标题：{project.title}
+类型：{project.genre or '未指定'}
+背景设定：{project.background or '未指定'}
+总体大纲：{project.plot_outline or '未指定'}
+写作风格：{project.writing_style or '未指定'}
+故事目标：{project.story_goal or '未指定'}
+
+【主要角色】
+{character_info if character_info else '暂无角色'}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【上一版本大纲】
+{old_outline_summary}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔥 【用户修改意见】（最高优先级！）
+{user_feedback}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【任务要求】
+1. **严格遵循用户意见**：用户的反馈是最高优先级，必须充分体现在新大纲中
+2. **保留可取之处**：如果用户没有明确否定的部分，可以保留并优化
+3. **解决用户提出的问题**：针对性地改进用户不满意的地方
+4. **保持三幕剧结构**：第一幕（第1-{act1_end}章）、第二幕（第{act1_end+1}-{act2_end}章）、第三幕（第{act2_end+1}-{total_chapters}章）
+5. **避免重复**：每章必须有新内容，不要重复相同类型的场景和事件
+6. **设置悬念**：每章结尾留下钩子，让读者想继续读下去
+7. **总章节数**：{total_chapters}章，每章约{avg_chapter_length}字
+
+【输出格式】
+请严格按照以下JSON格式输出{total_chapters}章大纲：
+
+```json
+[
+  {{
+    "chapter_number": 1,
+    "title": "引人入胜的标题",
+    "summary": "详细概要（100-150字），包含：主要场景、核心事件、角色状态、情感走向、章末悬念",
+    "key_events": [
+      "事件1：具体行动+结果",
+      "事件2：对话或冲突+影响",
+      "事件3：转折或发现+后续影响"
+    ],
+    "involved_characters": ["角色1", "角色2"],
+    "target_length": {avg_chapter_length},
+    "notes": "【改进说明】相比上一版有什么优化？如何体现用户意见？"
+  }}
+]
+```
+
+⚠️ **重要提醒**
+- 必须完整输出{total_chapters}章的大纲
+- JSON格式必须完全正确，可以被程序解析
+- 每一章都要体现"根据用户意见的改进"
+- 确保新大纲比旧大纲更好、更符合用户期望
+
+现在请认真分析用户意见，生成改进后的{total_chapters}章大纲："""
+        
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        
+        try:
+            estimated_tokens = total_chapters * 300 + 1000
+            max_tokens_needed = min(estimated_tokens, 16000)
+            
+            print(f"📝 开始根据用户反馈重新生成{total_chapters}章大纲")
+            print(f"📋 用户意见：{user_feedback[:100]}...")
+            
+            response = self._make_request(messages, temperature=0.7, max_tokens=max_tokens_needed)
+            
+            # 提取JSON
+            if "```json" in response:
+                response = response.split("```json")[1].split("```")[0].strip()
+            elif "```" in response:
+                response = response.split("```")[1].split("```")[0].strip()
+            
+            import json
+            outlines = json.loads(response)
+            
+            if len(outlines) != total_chapters:
+                print(f"⚠️ 警告：生成了{len(outlines)}章，预期{total_chapters}章")
+            
+            print(f"✅ 成功根据反馈重新生成{len(outlines)}章大纲")
+            return outlines
+            
+        except Exception as e:
+            print(f"❌ 大纲重新生成失败: {e}")
+            import traceback
+            traceback.print_exc()
             return []
     
     def _get_outline_context(self, project: NovelProject, current_chapter: int) -> str:
@@ -1271,9 +1520,20 @@ class GrokClient:
                 for exp in recent:
                     happened_events.append(f"[{char_name}] {exp.description}")
         
+        # 🔥 风格设定（最高优先级）
+        style_guide_section = ""
+        if project.style_guide and project.style_guide.strip():
+            style_guide_section = f"""
+⚠️⚠️⚠️ 【风格设定 - 最高优先级】 ⚠️⚠️⚠️
+{project.style_guide}
+以上风格设定必须严格遵守，优先级高于所有其他要求！
+================================
+
+"""
+        
         user_prompt = f"""请根据以下大纲创作第{outline.chapter_number}章的完整内容。
 
-{context}
+{style_guide_section}{context}
 
 {prev_chapter_context}
 
@@ -1305,6 +1565,8 @@ class GrokClient:
 8. **自然结尾**：章节结尾必须是具体的情节或对话，直接结束即可，绝对不要加"且看下回分解"、"欲知后事如何"等总结性语句，也不要写"本章完"
 9. **避免重复**：不要重复前面章节已经详细描述过的内容（如角色外貌、背景设定等），只需简短提及即可
 10. **保持沉浸感**：让读者沉浸在故事中，下一章会自然延续，不需要任何提示
+11. **开头多样性**：每章开头要有变化，可以从对话、动作、内心独白、环境描写等不同角度切入，避免使用相同的场景描述模式（例如：不要每章都从"某地的夜色依旧..."、"LOFT公寓的落地窗外..."等相似句式开始）
+12. **避免公式化**：拒绝使用固定的叙事模板和套路化的场景铺陈，每章都应该有独特的叙事节奏和视角，让读者感受到新鲜感
 
 {f"【创作提示】{outline.notes}" if outline.notes else ""}
 
@@ -1386,7 +1648,7 @@ class GrokClient:
         
         stage_goal_text = f"\n\n【阶段目标】\n这几章需要达到的状态：{stage_goal}" if stage_goal else ""
         
-        user_prompt = f"""请重新规划以下章节的大纲。
+        user_prompt = f"""请重新规划第{min_chapter}到第{max_chapter}章的大纲（共{len(chapter_numbers)}章）。
 
 【小说信息】
 标题：{project.title}
@@ -1396,41 +1658,78 @@ class GrokClient:
 【主要角色】
 {character_info if character_info else '暂无角色'}
 
-【需要重新规划的章节】
-第 {min_chapter} 章到第 {max_chapter} 章（共{len(chapter_numbers)}章）{stage_goal_text}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【重新规划的范围】
+第{min_chapter}章 到 第{max_chapter}章
 
-【前置剧情】（作为参考，不要修改）
-{before_context if before_context else '暂无前置剧情'}
+【前置剧情】（不可修改，必须衔接）
+{before_context if before_context else '这是故事开端，无前置剧情'}
 
-【后续剧情】（需衔接，不要修改）
-{after_context if after_context else '暂无后续剧情'}
+【后续剧情】（不可修改，必须对接）
+{after_context if after_context else '后续未规划'}
 
-【重新规划要求】
-1. 确保与前后剧情自然衔接
-2. 情节连贯，节奏合理
-3. 每章约{avg_chapter_length}字
-4. 角色发展合理
-5. 如有阶段目标，需在这几章内达成
+{stage_goal_text}
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【重新规划核心原则】
+
+✅ **前后衔接**
+- 必须从前置剧情自然延续
+- 必须为后续剧情铺垫或过渡
+- 不能与已有设定矛盾
+
+✅ **避免重复**
+- 不要重复前置剧情中的内容
+- 每章都要有新的实质性进展
+- 不要让角色做相同的事情
+
+✅ **故事结构**
+- 根据章节在整体中的位置安排节奏
+- 开头部分：建立基础，缓慢推进
+- 中间部分：冲突升级，张弛有度
+- 结尾部分：快速推进，高潮迭起
+
+✅ **悬念设计**
+- 每章设置新的悬念或问题
+- 逐步揭示真相，但保留谜团
+- 章节结尾留下钩子
+
+✅ **角色发展**
+- 继续推进角色成长
+- 深化角色关系变化
+- 避免角色行为不一致
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 【输出格式】
-请严格按照JSON格式输出：
+请严格按照以下JSON格式输出{len(chapter_numbers)}章大纲：
 
 ```json
 [
   {{
     "chapter_number": {min_chapter},
-    "title": "章节标题",
-    "summary": "章节概要（80-150字）",
-    "key_events": ["事件1", "事件2", "事件3"],
+    "title": "引人入胜的标题",
+    "summary": "详细概要（100-150字），包含：主要场景、核心事件、角色状态、情感走向、章末悬念",
+    "key_events": [
+      "事件1：具体行动+结果",
+      "事件2：对话或冲突+影响",
+      "事件3：转折或发现+后续影响"
+    ],
     "involved_characters": ["角色1", "角色2"],
     "target_length": {avg_chapter_length},
-    "notes": "创作要点"
-  }},
-  ...
+    "notes": "【悬念】本章留下什么疑问？【衔接】如何连接前后章节？"
+  }}
 ]
 ```
 
-现在请开始重新规划第{min_chapter}-{max_chapter}章的大纲："""
+⚠️ **检查清单**
+1. ✅ 是否与前置剧情自然衔接？
+2. ✅ 是否为后续剧情做好准备？
+3. ✅ 每章是否都有新内容，没有重复？
+4. ✅ 是否设置了足够的悬念？
+5. ✅ 节奏是否合理？
+6. ✅ JSON格式是否正确？
+
+现在请深呼吸，认真思考故事结构，重新规划第{min_chapter}-{max_chapter}章的大纲："""
         
         messages = [
             {"role": "system", "content": system_prompt},
@@ -1500,7 +1799,7 @@ class GrokClient:
         
         goal_text = new_goal or project.story_goal or "延续之前的故事发展"
         
-        user_prompt = f"""请为小说续写章节大纲。
+        user_prompt = f"""请为小说续写章节大纲，从第{start_chapter}章到第{end_chapter}章。
 
 【小说信息】
 标题：{project.title}
@@ -1510,37 +1809,63 @@ class GrokClient:
 【主要角色】
 {character_info if character_info else '暂无角色'}
 
-【最近剧情】（作为续写的基础）
+【最近5章剧情】（续写的起点）
 {recent_context}
 
-【续写要求】
-1. 起始章节：第{start_chapter}章
-2. 结束章节：第{end_chapter}章（共{additional_chapters}章）
-3. 续写目标：{goal_text}
-4. 每章约{avg_chapter_length}字
-5. 确保与已有大纲自然衔接
-6. 情节推进合理，走向预期目标
+【续写目标】
+{goal_text}
 
-【续写原则】
-- 基于已有剧情和角色发展
-- 不要与之前的情节矛盾
-- 合理安排情节密度和节奏
-- 设置悬念和冲突
-- 逐步达成目标，留有余韵
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【续写核心原则】
 
+✅ **无缝衔接**
+- 从第{current_count}章的结尾自然延续
+- 不要突兀地引入新元素
+- 保持已建立的故事基调和节奏
+
+✅ **避免重复**
+- 不要重复前{current_count}章已经发生的情节
+- 不要让角色反复做相同的事情
+- 每章都要有实质性的新进展
+
+✅ **设置悬念**
+- 续写部分要有新的悬念和冲突
+- 每章结尾留下钩子
+- 逐步揭示真相，但保留部分谜团
+
+✅ **角色发展**
+- 继续推进角色成长弧线
+- 深化已有角色关系
+- 如需引入新角色，要有充分理由
+
+✅ **节奏控制**
+- 根据在故事中的位置调整节奏
+- 如果接近结局，要加快节奏、提高密度
+- 如果还在中段，要稳定推进、张弛有度
+
+✅ **目标导向**
+- 每章都要朝着"{goal_text}"靠近
+- 不要无意义的支线或拖沓
+- 最终要自然地达成目标
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 【输出格式】
-请严格按照JSON格式输出：
+请严格按照以下JSON格式输出{additional_chapters}章大纲：
 
 ```json
 [
   {{
     "chapter_number": {start_chapter},
-    "title": "章节标题",
-    "summary": "章节概要（80-150字）",
-    "key_events": ["事件1", "事件2", "事件3"],
+    "title": "引人入胜的标题",
+    "summary": "详细概要（100-150字），包含：主要场景、核心事件、角色状态、情感走向、章末悬念",
+    "key_events": [
+      "事件1：具体行动+结果",
+      "事件2：对话或冲突+影响",
+      "事件3：转折或发现+后续影响"
+    ],
     "involved_characters": ["角色1", "角色2"],
     "target_length": {avg_chapter_length},
-    "notes": "创作要点"
+    "notes": "【悬念】本章留下什么疑问？【与前文的联系】如何衔接第{current_count}章？"
   }},
   ...
 ]

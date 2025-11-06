@@ -155,6 +155,7 @@ class NovelProject:
         self.writing_style = ""
         self.target_audience = ""
         self.story_goal = ""  # 故事目标/最终状态
+        self.style_guide = ""  # 风格设定（最高优先级的写作风格指导）
         
         self.characters: List[Character] = []
         self.chapters: List[Chapter] = []
@@ -417,6 +418,7 @@ class NovelProject:
             "writing_style": self.writing_style,
             "target_audience": self.target_audience,
             "story_goal": self.story_goal,
+            "style_guide": self.style_guide,
             "characters": [char.to_dict() for char in self.characters],
             "chapters": [chap.to_dict() for chap in self.chapters],
             "plot_points": self.plot_points,
@@ -460,6 +462,7 @@ class NovelProject:
         project.writing_style = data.get("writing_style", "")
         project.target_audience = data.get("target_audience", "")
         project.story_goal = data.get("story_goal", "")
+        project.style_guide = data.get("style_guide", "")
         
         project.characters = [Character.from_dict(c) for c in data.get("characters", [])]
         project.chapters = [Chapter.from_dict(c) for c in data.get("chapters", [])]

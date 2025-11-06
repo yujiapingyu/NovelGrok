@@ -1909,8 +1909,11 @@
                 <textarea id="editProjectOutline"></textarea>
             </div>
             <div class="form-group">
-                <label>写作风格</label>
-                <input type="text" id="editProjectStyle" placeholder="例如：紧凑、悬疑、诗意...">
+                <label>
+                    风格设定
+                    <span style="font-size: 0.9em; color: #888; margin-left: 8px;">大纲模式生成章节时会优先遵循此设定</span>
+                </label>
+                <textarea id="editProjectStyleGuide" rows="6" placeholder="例如：&#10;- 开头避免使用固定场景描述，每章尝试不同的切入角度（对话、动作、内心独白等）&#10;- 减少环境铺陈，直接进入情节&#10;- 多使用短句和对话推动故事&#10;- 控制每章的场景转换不超过3个&#10;- 写作风格：紧凑、悬疑、诗意...&#10;&#10;可随时修改此设定来调整写作风格"></textarea>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeModal('editProjectModal')">取消</button>
@@ -2080,6 +2083,49 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeModal('generateOutlineModal')">取消</button>
                 <button class="btn btn-primary" onclick="confirmGenerateOutline()">开始生成</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 根据反馈重新生成大纲模态框 -->
+    <div id="regenerateOutlineWithFeedbackModal" class="modal">
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header">
+                <h2>🔄 根据意见重新生成大纲</h2>
+            </div>
+            <div style="padding: 20px;">
+                <div class="form-group">
+                    <label>您的修改意见：<span style="color: red;">*</span></label>
+                    <textarea id="regenerateOutlineFeedback" class="form-control" rows="6" 
+                              placeholder="请详细描述您对当前大纲的意见和期望的改进方向，例如：&#10;&#10;- 前5章节奏太慢，希望加快进入主线冲突&#10;- 主角的成长弧线不够明显，希望增加更多内心挣扎的场景&#10;- 第10章的转折太突兀，希望在前面几章多铺垫&#10;- 配角的戏份太少，希望增加配角的支线故事&#10;- 整体氛围太沉重，希望加入一些轻松幽默的情节&#10;&#10;越详细越好，AI 会根据您的意见优化大纲"></textarea>
+                    <small style="color: #999;">提示：说明您对哪些章节、情节、节奏不满意，AI 会针对性优化</small>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">
+                    <div class="form-group">
+                        <label>章节数量：</label>
+                        <input type="number" id="regenerateTotalChapters" class="form-control" 
+                               min="1" max="100">
+                        <small style="color: #999;">可以调整章节数</small>
+                    </div>
+                    <div class="form-group">
+                        <label>平均章节字数：</label>
+                        <input type="number" id="regenerateAvgLength" class="form-control" 
+                               min="1000" max="10000" step="500">
+                        <small style="color: #999;">2000-5000字</small>
+                    </div>
+                </div>
+                <div style="margin-top: 20px; padding: 15px; background: #e3f2fd; border-radius: 8px; border-left: 4px solid #2196f3;">
+                    <p style="margin: 0; color: #1976d2; font-size: 14px;">
+                        💡 <strong>提示</strong><br>
+                        • AI 会保留您认可的部分，重点改进您不满意的地方<br>
+                        • 重新生成后可以继续提意见，反复优化<br>
+                        • 预计生成时间：2-3分钟
+                    </p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('regenerateOutlineWithFeedbackModal')">取消</button>
+                <button class="btn btn-primary" onclick="confirmRegenerateOutlineWithFeedback()">开始重新生成</button>
             </div>
         </div>
     </div>
