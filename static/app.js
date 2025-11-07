@@ -8,8 +8,7 @@ let generationPollingTimer = null; // 轮询定时器
 let currentCharacterTracking = null; // 当前查看的角色追踪数据
 let appConfig = {
     enable_outline_mode: true,
-    enable_import_novel: true,
-    enable_short_story_mode: true
+    enable_import_novel: true
 }; // 应用配置
 
 // API基础URL
@@ -30,7 +29,40 @@ document.addEventListener('DOMContentLoaded', () => {
     loadConfig();
     loadProjects();
     checkAPIStatus();
+    
+    // 从 localStorage 恢复侧边栏状态
+    const sidebarCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+    if (sidebarCollapsed) {
+        const sidebar = document.getElementById('sidebar');
+        const mainContent = document.getElementById('mainContent');
+        const toggleBtn = document.getElementById('sidebarToggle');
+        if (sidebar && mainContent && toggleBtn) {
+            sidebar.classList.add('collapsed');
+            mainContent.classList.add('sidebar-collapsed');
+            toggleBtn.innerHTML = '▶';
+        }
+    }
 });
+
+// ========== 侧边栏折叠功能 ==========
+
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const mainContent = document.getElementById('mainContent');
+    const toggleBtn = document.getElementById('sidebarToggle');
+    
+    if (!sidebar || !mainContent || !toggleBtn) return;
+    
+    const isCollapsed = sidebar.classList.toggle('collapsed');
+    mainContent.classList.toggle('sidebar-collapsed');
+    
+    // 更新按钮图标和位置
+    toggleBtn.innerHTML = isCollapsed ? '▶' : '◀';
+    toggleBtn.title = isCollapsed ? '展开侧边栏' : '收起侧边栏';
+    
+    // 保存状态到 localStorage
+    localStorage.setItem('sidebarCollapsed', isCollapsed);
+}
 
 // ========== 配置加载 ==========
 
@@ -86,30 +118,6 @@ function applyConfigToUI() {
         const outlineSection = document.getElementById('outlineSection');
         if (outlineSection) {
             outlineSection.style.display = 'block';
-        }
-    }
-    
-    // 隐藏/显示短篇小说模式
-    if (!appConfig.enable_short_story_mode) {
-        const shortStoryModeBtn = document.getElementById('shortStoryModeBtn');
-        if (shortStoryModeBtn) {
-            shortStoryModeBtn.style.display = 'none';
-        }
-        
-        // 如果当前是短篇模式，切换到直接生成模式
-        const directModeBtn = document.getElementById('directModeBtn');
-        if (directModeBtn && currentCreationMode === 'shortStory') {
-            directModeBtn.click();
-        }
-        
-        const shortStoryMode = document.getElementById('shortStoryMode');
-        if (shortStoryMode) {
-            shortStoryMode.style.display = 'none';
-        }
-    } else {
-        const shortStoryModeBtn = document.getElementById('shortStoryModeBtn');
-        if (shortStoryModeBtn) {
-            shortStoryModeBtn.style.display = 'inline-block';
         }
     }
 }
@@ -599,6 +607,12 @@ async function selectProject(title) {
         
         document.getElementById('emptyState').style.display = 'none';
         document.getElementById('projectContent').style.display = 'block';
+        
+        // 切换到概览标签页
+        const overviewTab = document.querySelector('.tab[onclick*="overview"]');
+        if (overviewTab) {
+            overviewTab.click();
+        }
         
         // 刷新各个标签页
         updateOverviewTab();
@@ -2303,24 +2317,14 @@ function switchCreationMode(mode) {
     // 更新按钮状态
     document.getElementById('directModeBtn').classList.toggle('active', mode === 'direct');
     document.getElementById('outlineModeBtn').classList.toggle('active', mode === 'outline');
-    const shortStoryBtn = document.getElementById('shortStoryModeBtn');
-    if (shortStoryBtn) {
-        shortStoryBtn.classList.toggle('active', mode === 'shortStory');
-    }
     
     // 切换内容
     document.getElementById('directMode').style.display = mode === 'direct' ? 'block' : 'none';
     document.getElementById('outlineMode').style.display = mode === 'outline' ? 'block' : 'none';
-    const shortStoryMode = document.getElementById('shortStoryMode');
-    if (shortStoryMode) {
-        shortStoryMode.style.display = mode === 'shortStory' ? 'block' : 'none';
-    }
     
     // 如果切换到大纲模式，加载大纲
     if (mode === 'outline') {
         loadOutlines();
-    } else if (mode === 'shortStory') {
-        loadShortStoryData();
     }
 }
 
@@ -3405,609 +3409,5 @@ function updateBatchGenerateVisibility() {
         );
         
         batchBar.style.display = hasUngenerated ? 'block' : 'none';
-    }
-}
-
-// ==================== 短篇小说模式 ====================
-
-let currentForeshadowings = [];
-let currentStoryCore = '';
-let currentOutlineData = null;
-
-// 加载短篇小说数据
-async function loadShortStoryData() {
-    if (!currentProject) return;
-    
-    // 重置步骤显示
-    document.getElementById('shortStoryStep1').style.display = 'block';
-    document.getElementById('shortStoryStep2').style.display = 'none';
-    document.getElementById('shortStoryStep3').style.display = 'none';
-    document.getElementById('shortStoryStep4').style.display = 'none';
-    
-    try {
-        const result = await apiCall(`/api/projects/${encodeURIComponent(currentProject.title)}/short-story-data`);
-        if (result.data) {
-            currentForeshadowings = result.data.foreshadowings || [];
-            currentStoryCore = result.data.story_core || '';
-            currentOutlineData = result.data.outline_data || null;
-            
-            // 如果已有数据，跳转到相应步骤
-            if (currentOutlineData) {
-                document.getElementById('shortStoryStep1').style.display = 'none';
-                document.getElementById('shortStoryStep2').style.display = 'none';
-                document.getElementById('shortStoryStep3').style.display = 'block';
-                document.getElementById('shortStoryStep4').style.display = 'block';
-                displayOutlinePreview(currentOutlineData);
-                displayForeshadowings();
-            } else if (currentStoryCore) {
-                document.getElementById('shortStoryStep1').style.display = 'none';
-                document.getElementById('shortStoryStep2').style.display = 'block';
-            }
-        }
-    } catch (error) {
-        console.log('加载短篇数据失败（可能还未创建）:', error);
-        currentForeshadowings = [];
-        currentStoryCore = '';
-        currentOutlineData = null;
-    }
-}
-
-// ===== 第一步：故事核心生成 =====
-
-async function generateStoryCores() {
-    if (!currentProject) {
-        showAlert('请先选择一个项目', 'warning');
-        return;
-    }
-    
-    const btn = document.getElementById('generateCoresBtn');
-    btn.disabled = true;
-    btn.textContent = '🔄 AI 生成中...';
-    
-    try {
-        const result = await apiCall(`/api/projects/${encodeURIComponent(currentProject.title)}/generate-story-cores`, {
-            method: 'POST',
-            body: JSON.stringify({
-                project_info: {
-                    title: currentProject.title,
-                    genre: currentProject.genre,
-                    background: currentProject.background,
-                    theme: currentProject.theme
-                }
-            })
-        });
-        
-        const cores = result.data.cores;
-        displayStoryCoreOptions(cores);
-        
-    } catch (error) {
-        showAlert('生成故事核心失败: ' + error.message, 'error');
-    } finally {
-        btn.disabled = false;
-        btn.textContent = '🤖 AI 生成 3 个故事核心方案';
-    }
-}
-
-function displayStoryCoreOptions(cores) {
-    const container = document.getElementById('storyCoreOptions');
-    container.style.display = 'block';
-    
-    let html = '<div style="display: flex; flex-direction: column; gap: 15px;">';
-    cores.forEach((core, index) => {
-        html += `
-            <div style="border: 2px solid #e0e0e0; padding: 15px; border-radius: 8px; cursor: pointer; transition: all 0.3s;" 
-                 onclick="selectStoryCore(${index}, '${escapeHtml(core).replace(/'/g, "\\'")}')">
-                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
-                    <h4 style="margin: 0; color: #667eea;">方案 ${index + 1}</h4>
-                    <button class="btn btn-secondary" style="padding: 5px 15px; font-size: 0.85em;">选择</button>
-                </div>
-                <p style="color: #2d3436; line-height: 1.6; margin: 0;">${escapeHtml(core)}</p>
-            </div>
-        `;
-    });
-    html += '</div>';
-    container.innerHTML = html;
-}
-
-function selectStoryCore(index, core) {
-    currentStoryCore = core;
-    showAlert('已选择方案 ' + (index + 1), 'success');
-    
-    // 进入第二步
-    document.getElementById('shortStoryStep1').style.display = 'none';
-    document.getElementById('shortStoryStep2').style.display = 'block';
-    
-    // 保存故事核心
-    saveShortStoryData({ story_core: currentStoryCore });
-}
-
-function showManualCoreInput() {
-    document.getElementById('storyCoreOptions').style.display = 'none';
-    document.getElementById('manualCoreInput').style.display = 'block';
-}
-
-function confirmStoryCore() {
-    const core = document.getElementById('shortStoryCore').value.trim();
-    if (!core) {
-        showAlert('请输入故事核心', 'warning');
-        return;
-    }
-    
-    currentStoryCore = core;
-    showAlert('已确认故事核心', 'success');
-    
-    // 进入第二步
-    document.getElementById('shortStoryStep1').style.display = 'none';
-    document.getElementById('shortStoryStep2').style.display = 'block';
-    
-    // 保存故事核心
-    saveShortStoryData({ story_core: currentStoryCore });
-}
-
-// ===== 第二步：创作参数 AI 建议 =====
-
-async function aiSuggestChapterCount() {
-    if (!currentStoryCore) {
-        showAlert('请先确定故事核心', 'warning');
-        return;
-    }
-    
-    try {
-        const result = await apiCall(`/api/projects/${encodeURIComponent(currentProject.title)}/ai-suggest-params`, {
-            method: 'POST',
-            body: JSON.stringify({
-                story_core: currentStoryCore,
-                param_type: 'chapter_count'
-            })
-        });
-        
-        document.getElementById('shortStoryTotalChapters').value = result.data.value;
-        showAlert(`AI 建议：${result.data.reason}`, 'success');
-        
-    } catch (error) {
-        showAlert('AI 建议失败: ' + error.message, 'error');
-    }
-}
-
-async function aiSuggestChapterLength() {
-    if (!currentStoryCore) {
-        showAlert('请先确定故事核心', 'warning');
-        return;
-    }
-    
-    try {
-        const result = await apiCall(`/api/projects/${encodeURIComponent(currentProject.title)}/ai-suggest-params`, {
-            method: 'POST',
-            body: JSON.stringify({
-                story_core: currentStoryCore,
-                param_type: 'chapter_length'
-            })
-        });
-        
-        document.getElementById('shortStoryChapterLength').value = result.data.value;
-        showAlert(`AI 建议：${result.data.reason}`, 'success');
-        
-    } catch (error) {
-        showAlert('AI 建议失败: ' + error.message, 'error');
-    }
-}
-
-async function aiSuggestPace() {
-    if (!currentStoryCore) {
-        showAlert('请先确定故事核心', 'warning');
-        return;
-    }
-    
-    try {
-        const result = await apiCall(`/api/projects/${encodeURIComponent(currentProject.title)}/ai-suggest-params`, {
-            method: 'POST',
-            body: JSON.stringify({
-                story_core: currentStoryCore,
-                param_type: 'pace'
-            })
-        });
-        
-        document.getElementById('shortStoryPace').value = result.data.value;
-        showAlert(`AI 建议：${result.data.reason}`, 'success');
-        
-    } catch (error) {
-        showAlert('AI 建议失败: ' + error.message, 'error');
-    }
-}
-
-// ===== 第三步：生成大纲预览 =====
-
-async function generateOutlinePreview() {
-    if (!currentProject || !currentStoryCore) {
-        showAlert('请先完成前面的步骤', 'warning');
-        return;
-    }
-    
-    const totalChapters = parseInt(document.getElementById('shortStoryTotalChapters').value);
-    const chapterLength = parseInt(document.getElementById('shortStoryChapterLength').value);
-    const pace = document.getElementById('shortStoryPace').value;
-    
-    if (totalChapters < 5 || totalChapters > 30) {
-        showAlert('章节数必须在5-30之间', 'warning');
-        return;
-    }
-    
-    // 显示加载状态
-    document.getElementById('shortStoryStep2').style.display = 'none';
-    document.getElementById('shortStoryStep3').style.display = 'block';
-    document.getElementById('outlinePreviewArea').innerHTML = `
-        <div style="text-align: center; padding: 40px;">
-            <div class="spinner" style="margin: 0 auto 20px;"></div>
-            <p style="color: #667eea; font-size: 16px;">正在生成大纲...</p>
-        </div>
-    `;
-    
-    try {
-        const result = await apiCall(`/api/projects/${encodeURIComponent(currentProject.title)}/generate-outline-preview`, {
-            method: 'POST',
-            body: JSON.stringify({
-                story_core: currentStoryCore,
-                total_chapters: totalChapters,
-                chapter_length: chapterLength,
-                pace: pace
-            })
-        });
-        
-        currentOutlineData = result.data.outline;
-        displayOutlinePreview(currentOutlineData);
-        
-        // 保存大纲数据
-        saveShortStoryData({ outline_data: currentOutlineData });
-        
-    } catch (error) {
-        showAlert('生成大纲失败: ' + error.message, 'error');
-        document.getElementById('shortStoryStep2').style.display = 'block';
-        document.getElementById('shortStoryStep3').style.display = 'none';
-    }
-}
-
-function displayOutlinePreview(outlines) {
-    const container = document.getElementById('outlinePreviewArea');
-    
-    let html = '<div style="max-height: 500px; overflow-y: auto;">';
-    outlines.forEach((outline, index) => {
-        html += `
-            <div style="border-left: 3px solid #667eea; padding: 15px; margin-bottom: 15px; background: #f8f9fa;">
-                <h4 style="color: #667eea; margin: 0 0 10px 0;">第 ${outline.chapter_number} 章：${escapeHtml(outline.title)}</h4>
-                <p style="color: #2d3436; line-height: 1.6; margin: 0 0 10px 0;">${escapeHtml(outline.summary)}</p>
-                ${outline.key_events && outline.key_events.length > 0 ? `
-                    <div style="margin-top: 10px;">
-                        <strong style="color: #666;">关键事件：</strong>
-                        <ul style="margin: 5px 0; padding-left: 20px; color: #666;">
-                            ${outline.key_events.map(e => `<li>${escapeHtml(e)}</li>`).join('')}
-                        </ul>
-                    </div>
-                ` : ''}
-                ${outline.foreshadowing_planted && outline.foreshadowing_planted.length > 0 ? `
-                    <div style="margin-top: 5px;">
-                        <strong style="color: #f59e0b;">🎯 伏笔埋下：</strong>
-                        <span style="color: #f59e0b;">${outline.foreshadowing_planted.join(', ')}</span>
-                    </div>
-                ` : ''}
-                ${outline.foreshadowing_resolved && outline.foreshadowing_resolved.length > 0 ? `
-                    <div style="margin-top: 5px;">
-                        <strong style="color: #10b981;">✅ 伏笔回收：</strong>
-                        <span style="color: #10b981;">${outline.foreshadowing_resolved.join(', ')}</span>
-                    </div>
-                ` : ''}
-            </div>
-        `;
-    });
-    html += '</div>';
-    
-    container.innerHTML = html;
-}
-
-async function regenerateOutline() {
-    if (confirm('确定要重新生成大纲吗？当前大纲将被覆盖。')) {
-        await generateOutlinePreview();
-    }
-}
-
-function proceedToForeshadowing() {
-    document.getElementById('shortStoryStep4').style.display = 'block';
-    
-    // 平滑滚动到伏笔设置
-    document.getElementById('shortStoryStep4').scrollIntoView({ behavior: 'smooth' });
-}
-
-// ===== 第四步：伏笔设置 =====
-
-async function aiGenerateForeshadowings() {
-    if (!currentOutlineData) {
-        showAlert('请先生成大纲', 'warning');
-        return;
-    }
-    
-    try {
-        const result = await apiCall(`/api/projects/${encodeURIComponent(currentProject.title)}/extract-foreshadowings`, {
-            method: 'POST',
-            body: JSON.stringify({
-                outline: currentOutlineData
-            })
-        });
-        
-        currentForeshadowings = result.data.foreshadowings;
-        displayForeshadowings();
-        saveForeshadowings();
-        
-        showAlert(`AI 提取了 ${currentForeshadowings.length} 个伏笔`, 'success');
-        
-    } catch (error) {
-        showAlert('提取伏笔失败: ' + error.message, 'error');
-    }
-}
-
-// 显示伏笔列表
-function displayForeshadowings() {
-    const listDiv = document.getElementById('foreshadowingList');
-    if (!listDiv) return;
-    
-    if (currentForeshadowings.length === 0) {
-        listDiv.innerHTML = '<p style="color: #999; text-align: center; padding: 20px;">暂无伏笔记录</p>';
-        return;
-    }
-    
-    let html = '<div style="display: flex; flex-direction: column; gap: 10px;">';
-    currentForeshadowings.forEach((item, index) => {
-        const statusBadge = item.resolved 
-            ? '<span style="background: #10b981; color: white; padding: 3px 8px; border-radius: 12px; font-size: 0.85em;">✓ 已回收</span>'
-            : '<span style="background: #f59e0b; color: white; padding: 3px 8px; border-radius: 12px; font-size: 0.85em;">待回收</span>';
-        
-        html += `
-            <div style="background: #f8f9fa; padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
-                <div style="flex: 1;">
-                    <div style="font-weight: 500; margin-bottom: 5px;">${escapeHtml(item.content)}</div>
-                    ${item.chapter ? `<small style="color: #666;">第 ${item.chapter} 章埋下</small>` : ''}
-                    ${item.resolved && item.resolved_chapter ? ` → <small style="color: #10b981;">第 ${item.resolved_chapter} 章回收</small>` : ''}
-                </div>
-                <div style="display: flex; gap: 5px; align-items: center;">
-                    ${statusBadge}
-                    <button class="btn btn-secondary" onclick="toggleForeshadowing(${index})" style="padding: 5px 10px; font-size: 0.85em;">
-                        ${item.resolved ? '标记未回收' : '标记已回收'}
-                    </button>
-                    <button class="btn btn-secondary" onclick="removeForeshadowing(${index})" style="padding: 5px 10px; font-size: 0.85em; background: #ef4444;">
-                        删除
-                    </button>
-                </div>
-            </div>
-        `;
-    });
-    html += '</div>';
-    listDiv.innerHTML = html;
-}
-
-// 添加伏笔对话框
-function showAddForeshadowingDialog() {
-    const content = prompt('请输入伏笔内容：');
-    if (!content || !content.trim()) return;
-    
-    const chapter = prompt('埋在第几章？（可选，留空则自动）');
-    
-    currentForeshadowings.push({
-        content: content.trim(),
-        chapter: chapter ? parseInt(chapter) : null,
-        resolved: false,
-        resolved_chapter: null
-    });
-    
-    displayForeshadowings();
-    saveForeshadowings();
-}
-
-// 切换伏笔状态
-function toggleForeshadowing(index) {
-    if (index < 0 || index >= currentForeshadowings.length) return;
-    
-    const item = currentForeshadowings[index];
-    if (!item.resolved) {
-        const chapter = prompt('在第几章回收？');
-        if (chapter) {
-            item.resolved = true;
-            item.resolved_chapter = parseInt(chapter);
-        }
-    } else {
-        item.resolved = false;
-        item.resolved_chapter = null;
-    }
-    
-    displayForeshadowings();
-    saveForeshadowings();
-}
-
-// 删除伏笔
-function removeForeshadowing(index) {
-    if (index < 0 || index >= currentForeshadowings.length) return;
-    if (!confirm('确定删除这个伏笔吗？')) return;
-    
-    currentForeshadowings.splice(index, 1);
-    displayForeshadowings();
-    saveForeshadowings();
-}
-
-// 保存短篇小说数据
-async function saveShortStoryData(data) {
-    if (!currentProject) return;
-    
-    try {
-        await apiCall(`/api/projects/${encodeURIComponent(currentProject.title)}/short-story-data`, {
-            method: 'POST',
-            body: JSON.stringify(data)
-        });
-    } catch (error) {
-        console.error('保存短篇数据失败:', error);
-    }
-}
-
-// 保存伏笔数据
-async function saveForeshadowings() {
-    await saveShortStoryData({ foreshadowings: currentForeshadowings });
-}
-
-// 开始完整生成（从第四步）
-async function startFullGeneration() {
-    if (!currentProject || !currentOutlineData) {
-        showAlert('请先完成前面的步骤', 'warning');
-        return;
-    }
-    
-    const totalChapters = currentOutlineData.length;
-    
-    if (!confirm(`确定开始创作 ${totalChapters} 章的短篇小说吗？\n这将需要约 ${Math.ceil(totalChapters * 0.7)} 分钟。`)) {
-        return;
-    }
-    
-    // 保存当前伏笔
-    await saveForeshadowings();
-    
-    // 显示进度（插入到第四步后面）
-    const progressHTML = `
-        <div class="card" id="shortStoryProgressCard" style="margin-top: 20px;">
-            <h3>📊 创作进度</h3>
-            <div style="background: #f5f7fa; padding: 15px; border-radius: 8px; margin-top: 10px;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-                    <span>进度:</span>
-                    <span id="shortStoryProgressText">0 / ${totalChapters}</span>
-                </div>
-                <div style="background: #e0e0e0; height: 20px; border-radius: 10px; overflow: hidden;">
-                    <div id="shortStoryProgressBar" style="background: linear-gradient(90deg, #667eea, #764ba2); height: 100%; width: 0%; transition: width 0.3s;"></div>
-                </div>
-                <div id="shortStoryCurrentChapter" style="margin-top: 10px; color: #666; font-size: 0.9em;">准备开始...</div>
-            </div>
-        </div>
-    `;
-    
-    const step4 = document.getElementById('shortStoryStep4');
-    if (!document.getElementById('shortStoryProgressCard')) {
-        step4.insertAdjacentHTML('afterend', progressHTML);
-    }
-    
-    try {
-        const result = await apiCall(`/api/projects/${encodeURIComponent(currentProject.title)}/generate-short-story`, {
-            method: 'POST',
-            body: JSON.stringify({
-                outline: currentOutlineData,
-                story_core: currentStoryCore,
-                foreshadowings: currentForeshadowings
-            })
-        });
-        
-        // 轮询进度
-        await pollShortStoryProgress(totalChapters);
-        
-        showAlert('短篇小说创作完成！', 'success');
-        
-        // 重新加载项目
-        await selectProject(currentProject.title);
-        
-        // 切换到阅读器
-        switchTab('reader');
-        
-    } catch (error) {
-        showAlert('生成短篇小说失败: ' + error.message, 'error');
-    }
-}
-
-// 旧版本生成函数（保留兼容性）
-async function generateShortStory() {
-    if (!currentProject) {
-        showAlert('请先选择一个项目', 'warning');
-        return;
-    }
-    
-    const totalChapters = parseInt(document.getElementById('shortStoryTotalChapters').value);
-    const chapterLength = parseInt(document.getElementById('shortStoryChapterLength').value);
-    const pace = document.getElementById('shortStoryPace').value;
-    const storyCore = document.getElementById('shortStoryCore').value.trim();
-    
-    if (totalChapters < 5 || totalChapters > 30) {
-        showAlert('章节数必须在5-30之间', 'warning');
-        return;
-    }
-    
-    if (chapterLength < 1000 || chapterLength > 4000) {
-        showAlert('每章字数必须在1000-4000之间', 'warning');
-        return;
-    }
-    
-    if (!confirm(`确定开始创作 ${totalChapters} 章的短篇小说吗？\n这将需要较长时间。`)) {
-        return;
-    }
-    
-    // 保存当前伏笔
-    await saveForeshadowings();
-    
-    // 显示进度
-    const progressDiv = document.getElementById('shortStoryProgress');
-    progressDiv.style.display = 'block';
-    document.getElementById('shortStoryProgressText').textContent = `0 / ${totalChapters}`;
-    document.getElementById('shortStoryProgressBar').style.width = '0%';
-    document.getElementById('shortStoryCurrentChapter').textContent = '准备开始...';
-    
-    // 禁用生成按钮
-    const btn = document.getElementById('generateShortStoryBtn');
-    btn.disabled = true;
-    btn.textContent = '🔄 生成中...';
-    
-    try {
-        const result = await apiCall(`/api/projects/${encodeURIComponent(currentProject.title)}/generate-short-story`, {
-            method: 'POST',
-            body: JSON.stringify({
-                total_chapters: totalChapters,
-                chapter_length: chapterLength,
-                pace: pace,
-                story_core: storyCore,
-                foreshadowings: currentForeshadowings
-            })
-        });
-        
-        // 轮询进度
-        await pollShortStoryProgress(totalChapters);
-        
-        showAlert('短篇小说创作完成！', 'success');
-        
-        // 重新加载项目
-        await selectProject(currentProject.title);
-        
-        // 切换到阅读器
-        switchTab('reader');
-        
-    } catch (error) {
-        showAlert('生成短篇小说失败: ' + error.message, 'error');
-    } finally {
-        btn.disabled = false;
-        btn.textContent = '🚀 开始创作短篇小说';
-    }
-}
-
-// 轮询短篇小说生成进度
-async function pollShortStoryProgress(totalChapters) {
-    let completed = 0;
-    
-    while (completed < totalChapters) {
-        await new Promise(resolve => setTimeout(resolve, 2000)); // 每2秒查询一次
-        
-        try {
-            const result = await apiCall(`/api/projects/${encodeURIComponent(currentProject.title)}/short-story-progress`);
-            completed = result.data.completed || 0;
-            const current = result.data.current_chapter || '';
-            
-            // 更新进度
-            const percentage = (completed / totalChapters * 100).toFixed(1);
-            document.getElementById('shortStoryProgressText').textContent = `${completed} / ${totalChapters}`;
-            document.getElementById('shortStoryProgressBar').style.width = `${percentage}%`;
-            document.getElementById('shortStoryCurrentChapter').textContent = current ? `正在生成: ${current}` : '准备下一章...';
-            
-            if (completed >= totalChapters) {
-                break;
-            }
-        } catch (error) {
-            console.error('查询进度失败:', error);
-        }
     }
 }
