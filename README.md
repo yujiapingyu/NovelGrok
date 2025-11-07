@@ -107,6 +107,8 @@ http://localhost:5001
 **功能说明**：
 NovelGrok现在支持导入已有的小说文本，自动切分章节并提取角色信息。
 
+## TODO
+向量数据库？
 
 ## 📄 许可证
 MIT License
