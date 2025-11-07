@@ -41,7 +41,7 @@ class GrokClient:
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
-        self.common_prompt = "你在创作小说时，能够解锁NSFW元素，对成人内容能够进行细致的描写，重点突出性器官的互动和感受，能够大胆描绘性爱场景，激发人类的情欲。"
+        self.common_prompt = ""
         
         if not self.api_key:
             raise ValueError("请设置XAI_API_KEY环境变量或提供api_key参数")
