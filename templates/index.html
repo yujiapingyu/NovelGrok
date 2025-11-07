@@ -1439,6 +1439,7 @@
                     </div>
                 </div>
                 <button 
+                    id="logoutBtn"
                     onclick="logout()" 
                     style="background: rgba(255,255,255,0.2); color: white; border: 2px solid rgba(255,255,255,0.5); padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 0.95em; font-weight: 500; transition: all 0.3s; backdrop-filter: blur(10px);"
                     onmouseover="this.style.background='rgba(255,255,255,0.3)'; this.style.borderColor='white';"
@@ -1457,8 +1458,11 @@
                 <button class="btn" style="width: 100%; margin-bottom: 10px;" onclick="showCreateProjectModal()">
                     ➕ 创建新项目
                 </button>
-                <button class="btn btn-secondary" style="width: 100%;" onclick="showImportNovelModal()">
+                <button class="btn btn-secondary" style="width: 100%; margin-bottom: 10px;" onclick="showImportNovelModal()">
                     📥 导入小说
+                </button>
+                <button class="btn" style="width: 100%; background: #ff9800;" onclick="showBatchTasksModal()">
+                    ⚙️ 任务管理
                 </button>
                 
                 <div class="project-list" id="projectList">
@@ -1698,6 +1702,25 @@
                         </div>
                     </div>
 
+        </div>
+    </div>
+
+    <!-- 批量任务管理模态框 -->
+    <div id="batchTasksModal" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="modal-header">
+                <h2>⚙️ 批量任务管理</h2>
+            </div>
+            <div style="padding: 20px; color: #666; margin-bottom: 10px;">
+                查看和管理所有批量生成任务
+            </div>
+            <div style="padding: 0 20px 15px;">
+                <button class="btn btn-secondary" onclick="refreshBatchTasks()">🔄 刷新</button>
+            </div>
+            <div id="batchTasksList" style="padding: 0 20px 20px; max-height: 500px; overflow-y: auto;"></div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeBatchTasksModal()">关闭</button>
+            </div>
         </div>
     </div>
 

@@ -90,6 +90,12 @@ function applyConfigToUI() {
         importBtn.style.display = appConfig.enable_import_novel ? 'inline-block' : 'none';
     }
     
+    // 隐藏/显示退出登录按钮
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        logoutBtn.style.display = appConfig.skip_login ? 'none' : 'inline-block';
+    }
+    
     // 应用大纲模式的最大章节数限制
     const maxChapters = appConfig.max_outline_chapters || 100;
     const outlineInput = document.getElementById('outlineChapterCount');
@@ -3474,5 +3480,155 @@ function updateBatchGenerateVisibility() {
         );
         
         batchBar.style.display = hasUngenerated ? 'block' : 'none';
+    }
+}
+
+// ==================== 批量任务管理 ====================
+
+// 任务管理定时刷新
+let batchTasksRefreshInterval = null;
+
+// 显示批量任务管理模态框
+function showBatchTasksModal() {
+    document.getElementById('batchTasksModal').style.display = 'flex';
+    refreshBatchTasks();
+    
+    // 启动定时刷新（每3秒刷新一次）
+    if (batchTasksRefreshInterval) {
+        clearInterval(batchTasksRefreshInterval);
+    }
+    batchTasksRefreshInterval = setInterval(refreshBatchTasks, 3000);
+}
+
+// 关闭批量任务管理模态框
+function closeBatchTasksModal() {
+    document.getElementById('batchTasksModal').style.display = 'none';
+    
+    // 停止定时刷新
+    if (batchTasksRefreshInterval) {
+        clearInterval(batchTasksRefreshInterval);
+        batchTasksRefreshInterval = null;
+    }
+}
+
+// 刷新批量任务列表
+async function refreshBatchTasks() {
+    try {
+        const result = await apiCall('/api/batch-tasks/all');
+        const tasks = result.data.tasks || [];
+        
+        const listContainer = document.getElementById('batchTasksList');
+        
+        if (tasks.length === 0) {
+            listContainer.innerHTML = `
+                <div class="empty-state" style="padding: 40px 20px;">
+                    <p style="color: #999; font-size: 1.1em;">暂无批量生成任务</p>
+                </div>
+            `;
+            return;
+        }
+        
+        listContainer.innerHTML = tasks.map(task => {
+            const progress = task.total > 0 ? (task.completed / task.total * 100).toFixed(1) : 0;
+            const statusText = getTaskStatusText(task.status);
+            const statusColor = getTaskStatusColor(task.status);
+            const startTime = task.start_time ? new Date(task.start_time).toLocaleString('zh-CN') : '未知';
+            
+            return `
+                <div class="card" style="margin-bottom: 15px; border-left: 4px solid ${statusColor};">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
+                        <div style="flex: 1;">
+                            <h4 style="margin: 0 0 8px 0; color: #333;">
+                                📚 ${escapeHtml(task.project_title)}
+                            </h4>
+                            <div style="font-size: 0.9em; color: #666;">
+                                <span style="display: inline-block; padding: 2px 8px; background: ${statusColor}; color: white; border-radius: 12px; font-size: 0.85em; margin-right: 10px;">
+                                    ${statusText}
+                                </span>
+                                <span>开始时间：${startTime}</span>
+                            </div>
+                        </div>
+                        ${task.status === 'generating' ? `
+                            <button class="btn btn-danger" onclick="cancelBatchTask('${escapeHtml(task.project_title)}')" style="padding: 8px 16px; font-size: 0.9em;">
+                                ⏹️ 取消任务
+                            </button>
+                        ` : ''}
+                    </div>
+                    
+                    <div style="margin-bottom: 15px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span style="font-size: 0.9em; color: #666;">
+                                ${task.status === 'generating' ? 
+                                    `正在生成第${task.current_chapter}章：${escapeHtml(task.current_title || '')}` : 
+                                    escapeHtml(task.message || '')}
+                            </span>
+                            <span style="font-weight: 600; color: ${statusColor};">
+                                ${task.completed} / ${task.total} (${progress}%)
+                            </span>
+                        </div>
+                        <div style="width: 100%; height: 12px; background: #e0e0e0; border-radius: 6px; overflow: hidden;">
+                            <div style="width: ${progress}%; height: 100%; background: ${statusColor}; transition: width 0.3s;"></div>
+                        </div>
+                    </div>
+                    
+                    ${task.failed_count > 0 ? `
+                        <div style="padding: 10px; background: #fff3cd; border-left: 3px solid #ffc107; border-radius: 4px; font-size: 0.9em;">
+                            ⚠️ 有 ${task.failed_count} 章生成失败
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }).join('');
+        
+    } catch (error) {
+        console.error('刷新任务列表失败:', error);
+        showAlert('刷新任务列表失败: ' + error.message, 'error');
+    }
+}
+
+// 获取任务状态文本
+function getTaskStatusText(status) {
+    const statusMap = {
+        'generating': '生成中',
+        'completed': '已完成',
+        'completed_with_errors': '完成(有错误)',
+        'cancelled': '已取消',
+        'error': '出错',
+        'unknown': '未知'
+    };
+    return statusMap[status] || status;
+}
+
+// 获取任务状态颜色
+function getTaskStatusColor(status) {
+    const colorMap = {
+        'generating': '#667eea',
+        'completed': '#28a745',
+        'completed_with_errors': '#ffc107',
+        'cancelled': '#6c757d',
+        'error': '#dc3545',
+        'unknown': '#999'
+    };
+    return colorMap[status] || '#999';
+}
+
+// 取消批量任务
+async function cancelBatchTask(projectTitle) {
+    if (!confirm(`确定要取消「${projectTitle}」的批量生成任务吗？\n\n已生成的章节会保留。`)) {
+        return;
+    }
+    
+    try {
+        await apiCall(`/api/projects/${encodeURIComponent(projectTitle)}/batch-generate-cancel`, {
+            method: 'POST'
+        });
+        
+        showAlert('任务已取消', 'success');
+        
+        // 刷新列表
+        setTimeout(refreshBatchTasks, 1000);
+        
+    } catch (error) {
+        showAlert('取消失败: ' + error.message, 'error');
     }
 }

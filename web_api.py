@@ -48,6 +48,9 @@ app.config['SESSION_COOKIE_SECURE'] = use_https  # 从环境变量读取
 # 默认密码: novelgrok2024 （请在 .env 中修改）
 PASSWORD_HASH = os.getenv('WEB_PASSWORD_HASH') or generate_password_hash('novelgrok2024')
 
+# 调试配置
+SKIP_LOGIN = os.getenv('SKIP_LOGIN', 'False').lower() in ('true', '1', 'yes')
+
 # 全局变量
 context_manager = ContextManager(max_tokens=20000)
 
@@ -186,6 +189,10 @@ def login_required(f):
     """登录验证装饰器"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        # 如果启用了跳过登录，直接放行
+        if SKIP_LOGIN:
+            return f(*args, **kwargs)
+        
         if not session.get('logged_in'):
             # API 请求返回 401
             if request.path.startswith('/api/'):
@@ -260,7 +267,8 @@ def get_config():
         'config': {
             'enable_outline_mode': enable_outline,
             'enable_import_novel': enable_import,
-            'max_outline_chapters': max_outline_chapters
+            'max_outline_chapters': max_outline_chapters,
+            'skip_login': SKIP_LOGIN
         }
     })
 
@@ -284,6 +292,10 @@ def reader():
 @app.before_request
 def check_login():
     """所有请求前检查登录状态（除了登录相关接口）"""
+    # 如果启用了跳过登录，直接放行
+    if SKIP_LOGIN:
+        return None
+    
     # 白名单：不需要登录的路径
     whitelist = ['/login', '/api/login', '/api/check-auth', '/api/config', '/static/']
     
@@ -1773,6 +1785,15 @@ def batch_generate_from_outline(project_title):
         end_chapter = data.get('end_chapter')
         enable_character_tracking = data.get('enable_character_tracking', False)
         
+        # 检查是否已有正在运行的批量任务
+        batch_status_key = f"{project_title}_batch"
+        existing_status = generation_status.get(batch_status_key, {})
+        if existing_status.get('status') == 'generating':
+            return jsonify({
+                'success': False,
+                'error': '该项目已有批量生成任务正在运行，请等待完成或先取消'
+            }), 400
+        
         project = NovelProject.load(project_title)
         
         # 获取所有大纲
@@ -1806,11 +1827,11 @@ def batch_generate_from_outline(project_title):
         print(f"[批量生成] 开始批量生成 {total_count} 个章节（第{start_chapter}-{end_chapter}章），角色追踪：{tracking_status}")
         
         # 初始化批量生成状态
-        batch_status_key = f"{project_title}_batch"
         all_chapter_numbers = [o.chapter_number for o in outlines_to_generate]
         
         generation_status[batch_status_key] = {
             'status': 'generating',
+            'project_title': project_title,
             'total': total_count,
             'completed': 0,
             'completed_chapters': [],  # 已完成的章节号列表
@@ -1882,11 +1903,44 @@ def batch_generate_cancel(project_title):
         if batch_status_key in generation_status:
             generation_status[batch_status_key]['status'] = 'cancelled'
             generation_status[batch_status_key]['message'] = '用户取消了批量生成'
+            save_task_status(batch_status_key, generation_status[batch_status_key])
             print(f"[批量生成] 用户取消了批量生成任务")
         
         return jsonify({
             'success': True,
             'data': {'message': '已取消批量生成'}
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/batch-tasks/all', methods=['GET'])
+@login_required
+def get_all_batch_tasks():
+    """获取所有批量生成任务状态"""
+    try:
+        tasks = []
+        for key, status in generation_status.items():
+            if key.endswith('_batch'):
+                tasks.append({
+                    'task_key': key,
+                    'project_title': status.get('project_title', key.replace('_batch', '')),
+                    'status': status.get('status'),
+                    'total': status.get('total', 0),
+                    'completed': status.get('completed', 0),
+                    'current_chapter': status.get('current_chapter'),
+                    'current_title': status.get('current_title'),
+                    'message': status.get('message'),
+                    'start_time': status.get('start_time'),
+                    'failed_count': len(status.get('failed', []))
+                })
+        
+        return jsonify({
+            'success': True,
+            'data': {'tasks': tasks}
         })
     except Exception as e:
         return jsonify({
@@ -1911,7 +1965,7 @@ def batch_generate_background(project_title, outlines_to_generate, batch_status_
             completed = 0
         
         for i, outline in enumerate(outlines_to_generate):
-            # 检查是否被取消
+            # 在循环开始就检查是否被取消
             if generation_status.get(batch_status_key, {}).get('status') == 'cancelled':
                 print(f"[批量生成] 任务已取消，停止生成")
                 break
@@ -1933,11 +1987,21 @@ def batch_generate_background(project_title, outlines_to_generate, batch_status_
             print(f"[批量生成] 生成第{chapter_number}章：{outline.title} ({completed+1}/{generation_status[batch_status_key]['total']})")
             
             try:
+                # 再次检查是否被取消（在实际生成前）
+                if generation_status.get(batch_status_key, {}).get('status') == 'cancelled':
+                    print(f"[批量生成] 任务已取消，停止生成")
+                    break
+                
                 # 重新加载项目以获取最新的章节内容
                 project = NovelProject.load(project_title)
                 
                 # 生成章节
                 chapter = client.generate_chapter_from_outline(project, outline)
+                
+                # 生成完成后再次检查是否被取消
+                if generation_status.get(batch_status_key, {}).get('status') == 'cancelled':
+                    print(f"[批量生成] 第{chapter_number}章生成完成但任务已取消，不保存此章节")
+                    break
                 
                 # 添加章节
                 project.add_chapter(chapter)
@@ -1975,6 +2039,11 @@ def batch_generate_background(project_title, outlines_to_generate, batch_status_
                 # 持久化更新后的状态
                 save_task_status(batch_status_key, generation_status[batch_status_key])
                 
+                # 保存后再检查一次是否被取消
+                if generation_status.get(batch_status_key, {}).get('status') == 'cancelled':
+                    print(f"[批量生成] 任务已取消，停止后续生成")
+                    break
+                
             except Exception as e:
                 error_msg = f"第{chapter_number}章生成失败: {str(e)}"
                 print(f"❌ {error_msg}")
@@ -1985,6 +2054,12 @@ def batch_generate_background(project_title, outlines_to_generate, batch_status_
                 })
                 # 持久化失败信息
                 save_task_status(batch_status_key, generation_status[batch_status_key])
+                
+                # 失败后也检查是否被取消
+                if generation_status.get(batch_status_key, {}).get('status') == 'cancelled':
+                    print(f"[批量生成] 任务已取消，停止后续生成")
+                    break
+                
                 # 继续生成下一章，不中断整个流程
                 continue
         
@@ -2044,7 +2119,16 @@ def main():
     port = int(os.getenv('WEB_PORT', '5001'))
     debug = os.getenv('WEB_DEBUG', 'False').lower() in ('true', '1', 'yes')
     
+    # 打印安全配置
     print()
+    print("【安全配置】")
+    if SKIP_LOGIN:
+        print("⚠️  登录验证已禁用 (SKIP_LOGIN=True)")
+        print("⚠️  仅用于本地调试，生产环境请设置 SKIP_LOGIN=False")
+    else:
+        print("✓  登录验证已启用")
+    print()
+    
     print(f"访问地址: http://localhost:{port}")
     if host == '0.0.0.0':
         print(f"公网访问: http://<your-ip>:{port}")
