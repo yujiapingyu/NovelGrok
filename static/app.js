@@ -644,6 +644,9 @@ async function selectProject(title) {
         // 应用配置（隐藏/显示功能按钮）
         applyConfigToUI();
         
+        // 检查是否有正在进行的批量生成任务
+        checkAndRestoreBatchProgress();
+        
     } catch (error) {
         showAlert('加载项目失败: ' + error.message, 'error');
     }
@@ -3146,6 +3149,45 @@ async function confirmAppendOutline() {
 // ==================== 批量生成章节功能 ====================
 
 let batchGenerateTimer = null;
+
+// 检查并恢复批量生成进度
+async function checkAndRestoreBatchProgress() {
+    if (!currentProject) return;
+    
+    try {
+        const result = await apiCall(`/api/projects/${encodeURIComponent(currentProject.title)}/batch-generate-progress`);
+        const status = result.data;
+        
+        // 如果有正在进行的任务，恢复显示进度
+        if (status.status === 'generating') {
+            console.log('[任务恢复] 检测到正在进行的批量生成任务，恢复进度显示');
+            
+            // 切换到AI创作标签页和大纲模式
+            const aiTab = document.querySelector('.tab[onclick*="ai"]');
+            if (aiTab) {
+                aiTab.click();
+            }
+            
+            setTimeout(() => {
+                const outlineModeBtn = document.getElementById('outlineModeBtn');
+                if (outlineModeBtn && !outlineModeBtn.classList.contains('active')) {
+                    outlineModeBtn.click();
+                }
+                
+                // 显示进度条
+                document.getElementById('batchGenerateBar').style.display = 'none';
+                document.getElementById('batchGenerateProgress').style.display = 'block';
+                
+                // 开始轮询进度
+                startBatchProgressPolling();
+                
+                showAlert('检测到未完成的批量生成任务，已恢复进度显示', 'info');
+            }, 500);
+        }
+    } catch (error) {
+        console.error('[任务恢复] 检查批量生成进度失败:', error);
+    }
+}
 
 // 显示批量生成对话框
 function showBatchGenerateDialog() {

@@ -19,6 +19,8 @@ from novel_ai.core.project import NovelProject, Character, Chapter
 from novel_ai.core.context_manager import ContextManager
 from novel_ai.api.grok_client import GrokClient
 from novel_ai.utils.text_utils import format_word_count
+import json
+import threading
 
 # 加载环境变量
 load_dotenv()
@@ -53,6 +55,129 @@ context_manager = ContextManager(max_tokens=20000)
 generation_status = {
     # 格式: 'project_title': {'status': 'generating', 'progress': 50, 'message': '正在生成...'}
 }
+
+# 任务持久化目录
+TASKS_DIR = os.path.join(os.path.dirname(__file__), 'tasks')
+os.makedirs(TASKS_DIR, exist_ok=True)
+
+# 任务恢复锁
+task_recovery_lock = threading.Lock()
+
+
+# ========== 任务持久化工具函数 ==========
+
+def save_task_status(task_key, status):
+    """保存任务状态到文件"""
+    try:
+        task_file = os.path.join(TASKS_DIR, f"{task_key}.json")
+        with open(task_file, 'w', encoding='utf-8') as f:
+            json.dump(status, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[任务持久化] 保存任务状态失败: {e}")
+
+
+def load_task_status(task_key):
+    """从文件加载任务状态"""
+    try:
+        task_file = os.path.join(TASKS_DIR, f"{task_key}.json")
+        if os.path.exists(task_file):
+            with open(task_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"[任务持久化] 加载任务状态失败: {e}")
+    return None
+
+
+def delete_task_status(task_key):
+    """删除任务状态文件"""
+    try:
+        task_file = os.path.join(TASKS_DIR, f"{task_key}.json")
+        if os.path.exists(task_file):
+            os.remove(task_file)
+    except Exception as e:
+        print(f"[任务持久化] 删除任务状态失败: {e}")
+
+
+def recover_pending_tasks():
+    """恢复未完成的批量生成任务"""
+    with task_recovery_lock:
+        try:
+            print("[任务恢复] 检查未完成的任务...")
+            task_files = [f for f in os.listdir(TASKS_DIR) if f.endswith('.json')]
+            
+            for task_file in task_files:
+                task_key = task_file[:-5]  # 去掉 .json 后缀
+                status = load_task_status(task_key)
+                
+                if not status:
+                    continue
+                
+                # 只恢复批量生成任务
+                if not task_key.endswith('_batch'):
+                    continue
+                
+                # 只恢复进行中的任务
+                if status.get('status') != 'generating':
+                    print(f"[任务恢复] 跳过已完成任务: {task_key}")
+                    continue
+                
+                project_title = task_key.replace('_batch', '')
+                print(f"[任务恢复] 恢复任务: {project_title}")
+                
+                # 将状态加载到内存
+                generation_status[task_key] = status
+                
+                # 获取剩余待生成的大纲
+                try:
+                    project = NovelProject.load(project_title)
+                    completed_chapters = set(status.get('completed_chapters', []))
+                    all_chapter_numbers = status.get('all_chapter_numbers', [])
+                    
+                    # 找出还没生成的章节
+                    remaining_numbers = [n for n in all_chapter_numbers if n not in completed_chapters]
+                    
+                    if not remaining_numbers:
+                        print(f"[任务恢复] 任务已全部完成: {project_title}")
+                        status['status'] = 'completed'
+                        status['message'] = '所有章节已生成完成'
+                        save_task_status(task_key, status)
+                        continue
+                    
+                    # 获取对应的大纲
+                    outlines_to_generate = [
+                        o for o in project.chapter_outlines
+                        if o.chapter_number in remaining_numbers
+                    ]
+                    outlines_to_generate.sort(key=lambda x: x.chapter_number)
+                    
+                    if not outlines_to_generate:
+                        print(f"[任务恢复] 无可用大纲，标记任务完成: {project_title}")
+                        status['status'] = 'completed'
+                        save_task_status(task_key, status)
+                        continue
+                    
+                    print(f"[任务恢复] 继续生成剩余 {len(outlines_to_generate)} 章")
+                    
+                    # 重新启动批量生成线程
+                    enable_tracking = status.get('enable_character_tracking', False)
+                    thread = threading.Thread(
+                        target=batch_generate_background,
+                        args=(project_title, outlines_to_generate, task_key, enable_tracking),
+                        kwargs={'is_recovery': True}
+                    )
+                    thread.daemon = True
+                    thread.start()
+                    
+                except Exception as e:
+                    print(f"[任务恢复] 恢复任务失败 {project_title}: {e}")
+                    traceback.print_exc()
+                    status['status'] = 'failed'
+                    status['message'] = f'恢复任务失败: {str(e)}'
+                    save_task_status(task_key, status)
+        
+        except Exception as e:
+            print(f"[任务恢复] 整体恢复失败: {e}")
+            traceback.print_exc()
 
 
 # ========== 登录验证 ==========
@@ -1682,18 +1807,26 @@ def batch_generate_from_outline(project_title):
         
         # 初始化批量生成状态
         batch_status_key = f"{project_title}_batch"
+        all_chapter_numbers = [o.chapter_number for o in outlines_to_generate]
+        
         generation_status[batch_status_key] = {
             'status': 'generating',
             'total': total_count,
             'completed': 0,
+            'completed_chapters': [],  # 已完成的章节号列表
+            'all_chapter_numbers': all_chapter_numbers,  # 所有待生成章节号
             'current_chapter': outlines_to_generate[0].chapter_number,
             'current_title': outlines_to_generate[0].title,
             'failed': [],
-            'message': f'开始批量生成第{start_chapter}-{end_chapter}章...'
+            'enable_character_tracking': enable_character_tracking,
+            'message': f'开始批量生成第{start_chapter}-{end_chapter}章...',
+            'start_time': datetime.now().isoformat()
         }
         
+        # 持久化任务状态
+        save_task_status(batch_status_key, generation_status[batch_status_key])
+        
         # 启动后台批量生成任务
-        import threading
         thread = threading.Thread(
             target=batch_generate_background,
             args=(project_title, outlines_to_generate, batch_status_key, enable_character_tracking)
@@ -1762,14 +1895,20 @@ def batch_generate_cancel(project_title):
         }), 500
 
 
-def batch_generate_background(project_title, outlines_to_generate, batch_status_key, enable_character_tracking=False):
+def batch_generate_background(project_title, outlines_to_generate, batch_status_key, enable_character_tracking=False, is_recovery=False):
     """后台批量生成章节"""
     try:
         project = NovelProject.load(project_title)
         client = GrokClient()
         
         total = len(outlines_to_generate)
-        completed = 0
+        
+        # 如果是恢复任务，从已完成的数量继续
+        if is_recovery:
+            completed = len(generation_status[batch_status_key].get('completed_chapters', []))
+            print(f"[批量生成-恢复] 从第{completed+1}章继续，剩余{total}章")
+        else:
+            completed = 0
         
         for i, outline in enumerate(outlines_to_generate):
             # 检查是否被取消
@@ -1785,10 +1924,13 @@ def batch_generate_background(project_title, outlines_to_generate, batch_status_
                 'completed': completed,
                 'current_chapter': chapter_number,
                 'current_title': outline.title,
-                'message': f'正在生成第{chapter_number}章：{outline.title} ({i+1}/{total})'
+                'message': f'正在生成第{chapter_number}章：{outline.title} ({completed+1}/{generation_status[batch_status_key]["total"]})'
             })
             
-            print(f"[批量生成] 生成第{chapter_number}章：{outline.title} ({i+1}/{total})")
+            # 持久化当前状态
+            save_task_status(batch_status_key, generation_status[batch_status_key])
+            
+            print(f"[批量生成] 生成第{chapter_number}章：{outline.title} ({completed+1}/{generation_status[batch_status_key]['total']})")
             
             try:
                 # 重新加载项目以获取最新的章节内容
@@ -1827,7 +1969,11 @@ def batch_generate_background(project_title, outlines_to_generate, batch_status_
                 project.save()
                 
                 completed += 1
-                print(f"✅ 第{chapter_number}章生成完成 ({completed}/{total})")
+                generation_status[batch_status_key]['completed_chapters'].append(chapter_number)
+                print(f"✅ 第{chapter_number}章生成完成 ({completed}/{generation_status[batch_status_key]['total']})")
+                
+                # 持久化更新后的状态
+                save_task_status(batch_status_key, generation_status[batch_status_key])
                 
             except Exception as e:
                 error_msg = f"第{chapter_number}章生成失败: {str(e)}"
@@ -1837,6 +1983,8 @@ def batch_generate_background(project_title, outlines_to_generate, batch_status_
                     'title': outline.title,
                     'error': str(e)
                 })
+                # 持久化失败信息
+                save_task_status(batch_status_key, generation_status[batch_status_key])
                 # 继续生成下一章，不中断整个流程
                 continue
         
@@ -1845,8 +1993,9 @@ def batch_generate_background(project_title, outlines_to_generate, batch_status_
             generation_status[batch_status_key].update({
                 'status': 'cancelled',
                 'completed': completed,
-                'message': f'批量生成已取消，已完成 {completed}/{total} 章'
+                'message': f'批量生成已取消，已完成 {completed}/{generation_status[batch_status_key]["total"]} 章'
             })
+            save_task_status(batch_status_key, generation_status[batch_status_key])
         else:
             # 全部完成
             failed_count = len(generation_status[batch_status_key].get('failed', []))
@@ -1854,16 +2003,20 @@ def batch_generate_background(project_title, outlines_to_generate, batch_status_
                 generation_status[batch_status_key].update({
                     'status': 'completed_with_errors',
                     'completed': completed,
-                    'message': f'批量生成完成，成功 {completed} 章，失败 {failed_count} 章'
+                    'message': f'批量生成完成，但有 {failed_count} 章失败'
                 })
+                save_task_status(batch_status_key, generation_status[batch_status_key])
             else:
                 generation_status[batch_status_key].update({
                     'status': 'completed',
                     'completed': completed,
                     'message': f'批量生成全部完成！共生成 {completed} 章'
                 })
+                save_task_status(batch_status_key, generation_status[batch_status_key])
+                # 任务完成后可以删除持久化文件（可选）
+                # delete_task_status(batch_status_key)
         
-        print(f"[批量生成] 批量生成任务结束：成功 {completed}/{total} 章")
+        print(f"[批量生成] 批量生成任务结束：成功 {completed}/{generation_status[batch_status_key]['total']} 章")
         
     except Exception as e:
         import traceback
@@ -1872,6 +2025,7 @@ def batch_generate_background(project_title, outlines_to_generate, batch_status_
             'status': 'error',
             'message': f'批量生成失败: {str(e)}'
         }
+        save_task_status(batch_status_key, generation_status[batch_status_key])
 
 
 # ========== 启动服务器 ==========
@@ -1881,6 +2035,10 @@ def main():
     print("=" * 60)
     print("NovelGrok Web界面启动中...")
     print("=" * 60)
+    
+    # 恢复未完成的任务
+    recover_pending_tasks()
+    
     # 从环境变量读取配置
     host = os.getenv('WEB_HOST', '0.0.0.0')
     port = int(os.getenv('WEB_PORT', '5001'))
