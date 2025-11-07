@@ -8,7 +8,8 @@ let generationPollingTimer = null; // 轮询定时器
 let currentCharacterTracking = null; // 当前查看的角色追踪数据
 let appConfig = {
     enable_outline_mode: true,
-    enable_import_novel: true
+    enable_import_novel: true,
+    max_outline_chapters: 100
 }; // 应用配置
 
 // API基础URL
@@ -87,6 +88,26 @@ function applyConfigToUI() {
     const importBtn = document.querySelector('button[onclick="showImportNovelModal()"]');
     if (importBtn) {
         importBtn.style.display = appConfig.enable_import_novel ? 'inline-block' : 'none';
+    }
+    
+    // 应用大纲模式的最大章节数限制
+    const maxChapters = appConfig.max_outline_chapters || 100;
+    const outlineInput = document.getElementById('outlineChapterCount');
+    const regenerateInput = document.getElementById('regenerateTotalChapters');
+    const outlineHint = document.getElementById('outlineChapterCountHint');
+    const regenerateHint = document.getElementById('regenerateChapterCountHint');
+    
+    if (outlineInput) {
+        outlineInput.max = maxChapters;
+    }
+    if (regenerateInput) {
+        regenerateInput.max = maxChapters;
+    }
+    if (outlineHint) {
+        outlineHint.textContent = `最多${maxChapters}章`;
+    }
+    if (regenerateHint) {
+        regenerateHint.textContent = `可以调整章节数，最多${maxChapters}章`;
     }
     
     // 隐藏/显示大纲模式相关功能
@@ -2507,10 +2528,11 @@ async function confirmGenerateOutline() {
     const totalChapters = parseInt(document.getElementById('outlineChapterCount').value);
     const avgLength = parseInt(document.getElementById('outlineChapterLength').value);
     const storyGoal = document.getElementById('outlineStoryGoal').value.trim();
+    const maxChapters = appConfig.max_outline_chapters || 100;
     
     // 验证输入
-    if (totalChapters < 1 || totalChapters > 100) {
-        showAlert('章节数量必须在1-100之间', 'warning');
+    if (totalChapters < 1 || totalChapters > maxChapters) {
+        showAlert(`章节数量必须在1-${maxChapters}之间`, 'warning');
         return;
     }
     
@@ -2620,14 +2642,15 @@ async function confirmRegenerateOutlineWithFeedback() {
     const feedback = document.getElementById('regenerateOutlineFeedback').value.trim();
     const totalChapters = parseInt(document.getElementById('regenerateTotalChapters').value);
     const avgLength = parseInt(document.getElementById('regenerateAvgLength').value);
+    const maxChapters = appConfig.max_outline_chapters || 100;
     
     if (!feedback) {
         showAlert('请输入您的修改意见', 'warning');
         return;
     }
     
-    if (totalChapters < 1 || totalChapters > 100) {
-        showAlert('章节数量必须在1-100之间', 'warning');
+    if (totalChapters < 1 || totalChapters > maxChapters) {
+        showAlert(`章节数量必须在1-${maxChapters}之间`, 'warning');
         return;
     }
     

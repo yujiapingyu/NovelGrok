@@ -128,12 +128,14 @@ def get_config():
     """获取前端功能配置"""
     enable_outline = os.getenv('ENABLE_OUTLINE_MODE', 'True').lower() in ('true', '1', 'yes')
     enable_import = os.getenv('ENABLE_IMPORT_NOVEL', 'True').lower() in ('true', '1', 'yes')
+    max_outline_chapters = int(os.getenv('MAX_OUTLINE_CHAPTERS', '100'))
     
     return jsonify({
         'success': True,
         'config': {
             'enable_outline_mode': enable_outline,
-            'enable_import_novel': enable_import
+            'enable_import_novel': enable_import,
+            'max_outline_chapters': max_outline_chapters
         }
     })
 

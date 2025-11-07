@@ -55,6 +55,11 @@
 ```env
 XAI_API_KEY=your_grok_api_key_here
 XAI_BASE_URL=https://api.x.ai/v1
+
+# 可选配置
+MAX_OUTLINE_CHAPTERS=100  # 大纲模式最多生成章节数（默认100）
+ENABLE_OUTLINE_MODE=True  # 是否启用大纲模式（默认True）
+ENABLE_IMPORT_NOVEL=True  # 是否启用小说导入功能（默认True）
 ```
 
 ### 配置 Web 访问密码（重要！）
