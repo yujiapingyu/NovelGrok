@@ -342,6 +342,9 @@ def get_projects():
                 print(f"加载项目 {name} 失败: {e}")
                 continue
         
+        # 按创建时间倒序排列（最新的在前面）
+        projects.sort(key=lambda x: x['created_at'], reverse=True)
+        
         return jsonify({
             'success': True,
             'data': projects
